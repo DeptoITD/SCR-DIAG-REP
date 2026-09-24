@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+venv/
+.env
+node_modules/
+*.log
+logs/
+*.sql.gz
+*.tar.gz
+.DS_Store
+Thumbs.db
+*.pem
+*.key
+secrets.json
+site_config.json
