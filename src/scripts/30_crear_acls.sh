@@ -1,7 +1,18 @@
 #!/bin/bash
 # 30_crear_acls.sh
-# Configura permisos y ACLs en NAS para identidades replicadas
-# Uso: bash 30_crear_acls.sh [--dry-run]
+# ⚠️  DEPRECATED: ACLs se configuran en repo separado: SCR-ACL-REP
+#
+# Este script NO DEBE ser usado. El manejo de ACLs, permisos y inheritance
+# se centraliza en repositorio SCR-ACL-REP que:
+# - Define ACLs por compartir (share-level)
+# - Aplica setfacl/chmod por usuario y grupo
+# - Gestiona masks e inheritance
+#
+# Flujo correcto:
+#   1. Este repo (SCR-DIAG-REP): diagnóstico + exportar + crear usuarios/grupos
+#   2. Otro repo (SCR-ACL-REP):  aplicar ACLs y permisos
+#
+# Usar: bash src/scripts/RUNME.sh --create-nas (sin --acls)
 
 set -euo pipefail
 
@@ -13,7 +24,8 @@ DRY_RUN="${1:---dry-run}"
 
 [[ ! -d "$LOG_DIR" ]] && mkdir -p "$LOG_DIR"
 
-log "===== INICIO CONFIGURACIÓN ACLs ====="
+log "===== ⚠️  SCRIPT DEPRECATED ====="
+log "ACLs se configuran en repo SCR-ACL-REP, no aquí"
 log "NAS: ${NAS_IP}"
 
 # Permisos para directorios SCR-DIAG-REP

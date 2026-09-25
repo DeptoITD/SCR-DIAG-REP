@@ -1,6 +1,7 @@
 #!/bin/bash
 # 20_crear_identidades_nas.sh
-# Crea identidades (usuarios, grupos) en NAS desde archivos exportados
+# Crea SOLO usuarios y grupos en NAS desde archivos exportados
+# NO toca ACLs ni permisos (ver repo SCR-ACL-REP)
 # Uso: bash 20_crear_identidades_nas.sh [--dry-run]
 
 set -euo pipefail
@@ -42,12 +43,18 @@ done < "$EXPORT_GROUP"
 
 # Crear usuarios
 info "Creando usuarios locales..."
-while IFS=: read -r usuario uid gid nombre home shell; do
+while IFS=: read -r usuario x uid gid nombre home shell; do
   [[ "$usuario" =~ ^# ]] && continue
   [[ -z "$usuario" ]] && continue
 
   # Filtrar usuarios del sistema (uid < 1000)
   [[ "$uid" -lt 1000 ]] && continue
+
+  # Validar que grupo existe (debe estar creado antes)
+  if ! getent group "$gid" > /dev/null 2>&1; then
+    info "  ✗ Grupo GID=$gid no existe para usuario $usuario (crear grupos primero)"
+    continue
+  fi
 
   if id "$usuario" > /dev/null 2>&1; then
     info "  ✓ Usuario existente: $usuario"
@@ -73,7 +80,7 @@ info "Creando usuarios Samba..."
       info "  ✓ Usuario Samba existente: $user"
     else
       if [[ "$DRY_RUN" != "--dry-run" ]]; then
-        echo "sambapass123" | sudo smbpasswd -a "$user" 2>/dev/null || \
+        echo "${SAMBA_PASSWORD}" | sudo smbpasswd -a "$user" 2>/dev/null || \
           info "  ! Error agregando usuario Samba $user"
         log "  ✓ Usuario Samba agregado: $user"
       else

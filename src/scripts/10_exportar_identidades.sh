@@ -40,7 +40,7 @@ fi
 
 info "Exportando usuarios locales..."
 if [[ "$DRY_RUN" != "--dry-run" ]]; then
-  cat /etc/passwd | grep -v "^#" | cut -d: -f1,3,4,5,6,7 > "$export_passwd" || error "No se pudo exportar passwd"
+  cat /etc/passwd | grep -v "^#" > "$export_passwd" || error "No se pudo exportar passwd"
   log "Usuarios exportados: $(wc -l < "$export_passwd") líneas"
 fi
 
@@ -58,11 +58,33 @@ if [[ "$DRY_RUN" != "--dry-run" ]]; then
   log "Contraseñas Samba exportadas (protegidas)"
 fi
 
+# Exportar configuraciones Samba
+info "Exportando configuraciones Samba..."
+export_testparm="${EXPORT_PATH}/${HOSTNAME}_testparm.conf"
+export_smbconf="${EXPORT_PATH}/${HOSTNAME}_smb.conf"
+export_fstab="${EXPORT_PATH}/${HOSTNAME}_fstab.txt"
+
+if [[ "$DRY_RUN" != "--dry-run" ]]; then
+  backup_file "$export_testparm"
+  testparm -s 2>/dev/null > "$export_testparm" || info "testparm no disponible"
+
+  backup_file "$export_smbconf"
+  [[ -f /etc/samba/smb.conf ]] && cp /etc/samba/smb.conf "$export_smbconf"
+
+  backup_file "$export_fstab"
+  cat /etc/fstab > "$export_fstab"
+
+  log "Configuraciones exportadas"
+fi
+
 # Mostrar resumen
 info "===== RESUMEN EXPORTACIÓN ====="
 [[ -f "$export_group" ]] && info "✓ Grupos: $export_group ($(wc -l < "$export_group") líneas)"
 [[ -f "$export_passwd" ]] && info "✓ Usuarios: $export_passwd ($(wc -l < "$export_passwd") líneas)"
 [[ -f "$export_samba" ]] && info "✓ Samba users: $export_samba ($(wc -l < "$export_samba") líneas)"
 [[ -f "$export_smbpass" ]] && info "✓ Samba passwd: $export_smbpass (protegido)"
+[[ -f "$export_testparm" ]] && info "✓ Testparm: $export_testparm"
+[[ -f "$export_smbconf" ]] && info "✓ smb.conf: $export_smbconf"
+[[ -f "$export_fstab" ]] && info "✓ fstab: $export_fstab"
 
 log "===== FIN EXPORTACIÓN ====="

@@ -21,16 +21,21 @@ if [[ "$MODE" == "--help" || "$MODE" == "-h" ]]; then
 Uso: bash RUNME.sh [opción]
 
 Opciones:
-  --export-server     Exportar identidades del servidor origen
-  --create-nas        Crear identidades en NAS (requiere archivos export)
-  --acls              Configurar ACLs en NAS
-  --full              Ejecutar flujo completo (exportar → crear → ACLs)
-  --dry-run           Simular todo sin hacer cambios
+  --diagnostico       Diagnóstico máquina (SMB, storage, RAID, LVM, ACLs)
+  --export-server     Exportar identidades + config del servidor
+  --create-nas        Crear usuarios/grupos en NAS (NO ACLs)
+  --full              Flujo completo (diagnostico → exportar → crear)
+  --dry-run           Simular sin cambios
   --help              Mostrar esta ayuda
 
+Notas:
+  • ACLs se configuran en repo separado (SCR-ACL-REP)
+  • --acls DEPRECATED (no usar)
+
 Ejemplos:
+  bash RUNME.sh --diagnostico        # Diagnóstico en servidor
   bash RUNME.sh --export-server      # Exportar desde srv-2
-  bash RUNME.sh --create-nas         # Crear en NAS (local)
+  bash RUNME.sh --create-nas         # Crear en NAS
   bash RUNME.sh --full               # Flujo completo
   bash RUNME.sh --dry-run            # Simular sin cambios
 EOF
@@ -38,8 +43,14 @@ EOF
 fi
 
 case "$MODE" in
+  --diagnostico)
+    log "===== DIAGNÓSTICO MÁQUINA ====="
+    bash "${SCRIPT_DIR}/01_diagnostico_completo.sh"
+    log "✓ Diagnóstico completado"
+    ;;
+
   --export-server)
-    log "===== EXPORTAR IDENTIDADES ====="
+    log "===== EXPORTAR IDENTIDADES + CONFIG ====="
     bash "${SCRIPT_DIR}/10_exportar_identidades.sh"
     log "✓ Exportación completada"
     ;;
@@ -47,28 +58,29 @@ case "$MODE" in
   --create-nas)
     log "===== CREAR IDENTIDADES NAS ====="
     bash "${SCRIPT_DIR}/20_crear_identidades_nas.sh"
-    log "✓ Identidades creadas"
+    log "✓ Identidades creadas (usuarios/grupos)"
     ;;
 
   --acls)
-    log "===== CONFIGURAR ACLs ====="
-    bash "${SCRIPT_DIR}/30_crear_acls.sh"
-    log "✓ ACLs configurados"
+    log "⚠️  DEPRECATED: ACLs en repo SCR-ACL-REP"
+    log "No ejecutar aquí"
+    exit 1
     ;;
 
   --full)
-    log "===== INICIO FLUJO COMPLETO ====="
+    log "===== FLUJO COMPLETO ====="
+    bash "${SCRIPT_DIR}/01_diagnostico_completo.sh"
     bash "${SCRIPT_DIR}/10_exportar_identidades.sh"
     bash "${SCRIPT_DIR}/20_crear_identidades_nas.sh"
-    bash "${SCRIPT_DIR}/30_crear_acls.sh"
-    log "✓ Flujo completo finalizado"
+    log "✓ Flujo completado (diagnóstico + exportar + crear)"
+    log "Siguiente: aplicar ACLs con repo SCR-ACL-REP"
     ;;
 
   --dry-run)
     log "===== MODO SIMULACIÓN ====="
+    bash "${SCRIPT_DIR}/01_diagnostico_completo.sh"
     bash "${SCRIPT_DIR}/10_exportar_identidades.sh" --dry-run
     bash "${SCRIPT_DIR}/20_crear_identidades_nas.sh" --dry-run
-    bash "${SCRIPT_DIR}/30_crear_acls.sh" --dry-run
     log "✓ Simulación finalizada (sin cambios reales)"
     ;;
 
