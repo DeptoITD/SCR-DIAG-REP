@@ -20,11 +20,11 @@ log "Modo: ${DRY_RUN}"
 # Crear directorio export si no existe
 [[ ! -d "$EXPORT_PATH" ]] && mkdir -p "$EXPORT_PATH" && info "Directorio creado: $EXPORT_PATH"
 
-HOSTNAME=$(hostname -s)
-export_group="${EXPORT_PATH}/${HOSTNAME}_group.txt"
-export_passwd="${EXPORT_PATH}/${HOSTNAME}_passwd.txt"
-export_samba="${EXPORT_PATH}/${HOSTNAME}_samba_users.txt"
-export_smbpass="${EXPORT_PATH}/${HOSTNAME}_smbpasswd.exp"
+# Usar hostname de config (no $(hostname) local)
+export_group="${EXPORT_GROUP}"
+export_passwd="${EXPORT_PASSWD}"
+export_samba="${EXPORT_SAMBA_USERS}"
+export_smbpass="${EXPORT_SMBPASSWD}"
 
 # Backup previo
 backup_file "$export_group"
@@ -60,9 +60,9 @@ fi
 
 # Exportar configuraciones Samba
 info "Exportando configuraciones Samba..."
-export_testparm="${EXPORT_PATH}/${HOSTNAME}_testparm.conf"
-export_smbconf="${EXPORT_PATH}/${HOSTNAME}_smb.conf"
-export_fstab="${EXPORT_PATH}/${HOSTNAME}_fstab.txt"
+export_testparm="${EXPORT_PATH}/${SERVIDOR_ORIGEN_HOSTNAME}_testparm.conf"
+export_smbconf="${EXPORT_PATH}/${SERVIDOR_ORIGEN_HOSTNAME}_smb.conf"
+export_fstab="${EXPORT_PATH}/${SERVIDOR_ORIGEN_HOSTNAME}_fstab.txt"
 
 if [[ "$DRY_RUN" != "--dry-run" ]]; then
   backup_file "$export_testparm"
