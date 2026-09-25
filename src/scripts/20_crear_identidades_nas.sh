@@ -15,13 +15,22 @@ DRY_RUN="${1:---dry-run}"
 [[ ! -d "$LOG_DIR" ]] && mkdir -p "$LOG_DIR"
 
 log "===== INICIO CREACIÓN IDENTIDADES NAS ====="
-log "NAS: ${NAS_IP}"
 log "Modo: ${DRY_RUN}"
 
-# Validar archivos export
-for file in "$EXPORT_GROUP" "$EXPORT_PASSWD" "$EXPORT_SAMBA_USERS"; do
-  [[ ! -f "$file" ]] && error "Archivo no encontrado: $file"
-done
+# Auto-detectar archivos export (buscar *_group.txt, *_passwd.txt)
+EXPORT_GROUP=$(ls "${EXPORT_PATH}"/*_group.txt 2>/dev/null | head -1)
+EXPORT_PASSWD=$(ls "${EXPORT_PATH}"/*_passwd.txt 2>/dev/null | head -1)
+EXPORT_SAMBA_USERS=$(ls "${EXPORT_PATH}"/*_samba_users.txt 2>/dev/null | head -1)
+
+# Validar archivos encontrados
+[[ -z "$EXPORT_GROUP" ]] && error "No encontrado: *_group.txt en ${EXPORT_PATH}"
+[[ -z "$EXPORT_PASSWD" ]] && error "No encontrado: *_passwd.txt en ${EXPORT_PATH}"
+[[ -z "$EXPORT_SAMBA_USERS" ]] && info "Nota: no encontrado *_samba_users.txt (opcional)"
+
+log "Archivos detectados:"
+log "  Group: $(basename "$EXPORT_GROUP")"
+log "  Passwd: $(basename "$EXPORT_PASSWD")"
+[[ -n "$EXPORT_SAMBA_USERS" ]] && log "  Samba: $(basename "$EXPORT_SAMBA_USERS")"
 
 # Crear grupos
 info "Creando grupos locales..."

@@ -44,19 +44,19 @@ fi
 
 case "$MODE" in
   --diagnostico)
-    log "===== DIAGNÓSTICO MÁQUINA ====="
+    log "===== DIAGNÓSTICO MÁQUINA ACTUAL ====="
     bash "${SCRIPT_DIR}/01_diagnostico_completo.sh"
     log "✓ Diagnóstico completado"
     ;;
 
   --export-server)
-    log "===== EXPORTAR IDENTIDADES + CONFIG ====="
+    log "===== EXPORTAR IDENTIDADES (desde máquina actual) ====="
     bash "${SCRIPT_DIR}/10_exportar_identidades.sh"
     log "✓ Exportación completada"
     ;;
 
   --create-nas)
-    log "===== CREAR IDENTIDADES NAS ====="
+    log "===== CREAR IDENTIDADES (desde exports locales) ====="
     bash "${SCRIPT_DIR}/20_crear_identidades_nas.sh"
     log "✓ Identidades creadas (usuarios/grupos)"
     ;;
