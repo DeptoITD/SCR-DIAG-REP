@@ -33,3 +33,34 @@ set_perms() {
   local user="$2"
   [[ -e "$path" ]] && sudo chown -R "$user:$user" "$path"
 }
+
+require_root() {
+  [[ $(id -u) -eq 0 ]] || error "Este comando requiere privilegios root (sudo)."
+}
+
+generate_password() {
+  # 16-char alnum, no ambiguous chars
+  openssl rand -base64 16 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c16 || \
+    tr -dc 'A-Za-z0-9' < /dev/urandom | head -c16
+}
+
+mostrar_password_generada() {
+  local user="$1" pass="$2"
+  echo ""
+  echo "########################################################"
+  echo "#  USUARIO: $user"
+  echo "#  PASSWORD (se muestra UNA sola vez, cópiela ahora):"
+  echo "#     $pass"
+  echo "########################################################"
+  echo ""
+}
+
+confirm() {
+  local prompt="$1" ans
+  read -r -p "$prompt [s/N]: " ans
+  [[ "$ans" =~ ^[sS]$ ]]
+}
+
+pause() {
+  read -r -p "Presione Enter para continuar..." _
+}
