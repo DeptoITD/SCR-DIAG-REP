@@ -2,16 +2,22 @@
 # Funciones compartidas
 
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "${LOG_FILE}"
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+  echo "$msg"
+  [[ -n "${LOG_FILE:-}" ]] && echo "$msg" >> "${LOG_FILE}"
 }
 
 error() {
-  echo "[ERROR] $1" >&2 | tee -a "${LOG_FILE}"
+  local msg="[ERROR] $1"
+  echo "$msg" >&2
+  [[ -n "${LOG_FILE:-}" ]] && echo "$msg" >> "${LOG_FILE}"
   exit 1
 }
 
 info() {
-  echo "[INFO] $1" | tee -a "${LOG_FILE}"
+  local msg="[INFO] $1"
+  echo "$msg"
+  [[ -n "${LOG_FILE:-}" ]] && echo "$msg" >> "${LOG_FILE}"
 }
 
 backup_file() {

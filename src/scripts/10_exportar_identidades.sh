@@ -6,12 +6,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "${SCRIPT_DIR}/utils.sh"
 source "${SCRIPT_DIR}/../config/servers.env"
 
-DRY_RUN="${1:---dry-run}"
-
+# Definir LOG_FILE antes de sourcea utils.sh
+export LOG_FILE="${LOG_DIR}/exportar_$(date +%Y%m%d_%H%M%S).log"
 [[ ! -d "$LOG_DIR" ]] && mkdir -p "$LOG_DIR"
+
+source "${SCRIPT_DIR}/utils.sh"
+
+DRY_RUN="${1:---dry-run}"
 
 log "===== INICIO EXPORTACIÓN IDENTIDADES ====="
 log "Servidor origen: ${SERVIDOR_ORIGEN_IP}"
