@@ -7,10 +7,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "${SCRIPT_DIR}/../config/servers.env"
+source "${SCRIPT_DIR}/../config/servers.env" || true
 
-# Definir LOG_FILE antes de sourcea utils.sh
+# Definir defaults si no vienen de servers.env
+LOG_DIR="${LOG_DIR:-/opt/scripts/SCR-DIAG-REP/logs}"
 export LOG_FILE="${LOG_DIR}/exportar_$(date +%Y%m%d_%H%M%S).log"
+
+# Crear directorio logs si no existe
 [[ ! -d "$LOG_DIR" ]] && mkdir -p "$LOG_DIR"
 
 source "${SCRIPT_DIR}/utils.sh"
