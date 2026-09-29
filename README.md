@@ -62,8 +62,11 @@ nano config/servers.env
 # Diagnóstico (solo lectura, recolecta estado)
 bash src/scripts/01_diagnostico_completo.sh
 
-# Exportar identidades + config
+# Exportar identidades + config (SIMULACIÓN: sin cambios)
 bash src/scripts/10_exportar_identidades.sh
+
+# Exportar REAL (escribe archivos)
+bash src/scripts/10_exportar_identidades.sh --execute
 ```
 
 **Genera en `src/export/`:**
@@ -103,10 +106,16 @@ Recolecta: sistema, servicios, usuarios, grupos, Samba, discos, RAID, LVM, mount
 
 ### Exportar (Servidor)
 ```bash
+# Modo simulación (default: sin cambios, solo previsualiza)
 bash src/scripts/10_exportar_identidades.sh
+
+# Modo ejecución real (escribe archivos en src/export/)
+bash src/scripts/10_exportar_identidades.sh --execute
 ```
 Genera archivos en `src/export/hostname_*.txt`:
 - passwd, group, Samba users, testparm config, smb.conf, fstab
+
+**Nota:** Default es `--dry-run` (simulación manual). Para escribir archivos, pasar `--execute`.
 
 ### Crear Identidades (NAS)
 ```bash
@@ -166,6 +175,15 @@ grep ERROR logs/*.log
 ## Troubleshooting
 
 ### Permisos Denegados en Export
+**Error:** `Permission denied` al escribir en `src/export/`
+
+**Causa:** Directorio sin permisos de escritura para el usuario que ejecuta el script.
+
+**Solución 1** (automática en el script):
+- Script valida permisos de `src/export/` y crea con `chmod 755` si no existe
+- Si falla, script muestra comando corrector
+
+**Solución 2** (manual si error persiste):
 ```bash
 sudo chown -R soporte:soporte /opt/scripts/SCR-DIAG-REP/src/export
 sudo chmod -R 755 /opt/scripts/SCR-DIAG-REP/src/export
