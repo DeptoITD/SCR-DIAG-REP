@@ -4,23 +4,27 @@
 ## Propósito
 Replicar identidades (usuarios, grupos, Samba) + diagnosticar máquina (SMB, ACLs, storage, RAID, LVM).
 
-**Flujo:**
+**Flujo Simple:**
 ```
-Servidor Origen (srv-2)
-  ├─ 01_diagnostico_completo.sh  → Recolecta estado máquina (SMB, storage, ACLs, RAID, LVM)
-  ├─ 10_exportar_identidades.sh  → passwd, group, Samba, config (testparm, smb.conf, fstab)
-  └─ Archivos export en src/export/
-       ↓ (git push / SCP)
-       ↓
-NAS Destino (/opt/scripts/SCR-DIAG-REP)
-  ├─ 20_crear_identidades_nas.sh → useradd, groupadd, smbpasswd (solo usuarios/grupos)
-  └─ Siguiente: ACLs en repo SCR-ACL-REP (perfiles, especialidades, permisos)
+1. EQUIPO A (Origen)
+   └─ bash menu.sh → 2: Exportar
+      └─ Genera: src/export/export_hostname_timestamp/
+         └─ Muestra instrucciones: qué copiar + qué correr en otro equipo
+
+2. COPIA MANUAL (USB, SCP, Samba, etc.)
+   └─ Copia carpeta export_* a otro equipo
+      └─ En: /opt/scripts/SCR-DIAG-REP/src/export/
+
+3. EQUIPO B (Destino)
+   └─ bash menu.sh → 3: Importar
+      └─ Selecciona export_* 
+      └─ Crea usuarios, grupos, Samba locales
 ```
 
 **Integración con SCR-ACL-REP:**
-- **SCR-DIAG-REP:** Setup inicial equipo + replicar identidades
-- **SCR-ACL-REP:** Configurar ACLs, perfiles, especialidades (después de crear identidades)
-- **Entrada ACL-REP:** `src/export/srv2_passwd.txt`, `src/export/srv2_group.txt` (UIDs/GIDs)
+- **SCR-DIAG-REP:** Exportar identidades + crear en destino
+- **SCR-ACL-REP:** Configurar ACLs, perfiles, especialidades (después de este repo)
+- **Entrada ACL-REP:** `src/export/usuarios.db`, `src/export/equipos.db`
 
 ## Archivos Exportados
 - `srv2_passwd.txt` — Usuarios Linux (uid, gid, home, shell)
@@ -48,201 +52,111 @@ SCR-DIAG-REP/
 └── README.md
 ```
 
-## Instalación
+## Instalación Rápida
 
-### 1. En Servidor Origen (srv-2)
+### Cualquier Equipo (igual proceso)
 ```bash
 cd /opt/scripts
 git clone https://github.com/DeptoITD/SCR-DIAG-REP.git
 cd SCR-DIAG-REP
 
-# Editar config/servers.env
-nano config/servers.env
-
-# Diagnóstico (solo lectura, recolecta estado)
-bash src/scripts/01_diagnostico_completo.sh
-
-# Exportar identidades + config (SIMULACIÓN: sin cambios)
-bash src/scripts/10_exportar_identidades.sh
-
-# Exportar REAL (escribe archivos)
-bash src/scripts/10_exportar_identidades.sh --execute
+# Listo. No necesitas editar servers.env si usas /opt/scripts/SCR-DIAG-REP
+bash menu.sh
 ```
 
-**Genera en `src/export/`:**
-- `srv2_passwd.txt` — usuarios Linux
-- `srv2_group.txt` — grupos Linux  
-- `srv2_samba_users.txt` — usuarios Samba
-- `srv2_testparm.conf` — config Samba
-- `srv2_smbconf.txt` — backup smb.conf
-- `srv2_fstab.txt` — mounts
+**Eso es todo.** El repo es agnóstico y funciona en cualquier máquina.
 
-### 2. En NAS Destino
+## Uso (Menú Interactivo)
+
 ```bash
-cd /opt/scripts
-git clone https://github.com/DeptoITD/SCR-DIAG-REP.git
-cd SCR-DIAG-REP
-
-# Editar config/servers.env
-nano config/servers.env
-
-# Modo simulación
-bash src/scripts/RUNME.sh --dry-run
-
-# Crear SOLO usuarios y grupos (no ACLs)
-bash src/scripts/RUNME.sh --create-nas
+bash menu.sh
 ```
 
-**Nota:** ACLs configuradas en repo `SCR-ACL-REP` (separado)
-
-## Uso
-
-### Diagnóstico (Servidor)
-```bash
-bash src/scripts/01_diagnostico_completo.sh
+### 1. Diagnóstico
 ```
-Recolecta: sistema, servicios, usuarios, grupos, Samba, discos, RAID, LVM, mounts, ACLs, fstab.  
-**Solo lectura, sin cambios.**
-
-### Exportar (Servidor)
-```bash
-# Modo simulación (default: sin cambios, solo previsualiza)
-bash src/scripts/10_exportar_identidades.sh
-
-# Modo ejecución real (escribe archivos en src/export/)
-bash src/scripts/10_exportar_identidades.sh --execute
+→ 1: Diagnóstico de equipo
 ```
-Genera archivos en `src/export/hostname_*.txt`:
-- passwd, group, Samba users, testparm config, smb.conf, fstab
+Recolecta (solo lectura): sistema, servicios, usuarios, grupos, Samba, discos, RAID, LVM, mounts, ACLs, fstab.
 
-**Nota:** Default es `--dry-run` (simulación manual). Para escribir archivos, pasar `--execute`.
-
-### Crear Identidades (NAS)
-```bash
-bash src/scripts/20_crear_identidades_nas.sh
+### 2. Exportar
 ```
-Lee export → crea **solo usuarios/grupos** locales + Samba.  
-**No toca permisos ni ACLs.**
-
-### Flujo Completo
-```bash
-# Simulación
-bash src/scripts/RUNME.sh --dry-run
-
-# Exportar
-bash src/scripts/RUNME.sh --export-server
-
-# Crear en NAS
-bash src/scripts/RUNME.sh --create-nas
-
-# Flujo completo (exportar + crear)
-bash src/scripts/RUNME.sh --full
+→ 2: Exportar configuración
 ```
+Genera: `src/export/export_hostname_YYYYMMDD_HHMMSS/`
 
-## Opciones Script Maestro (RUNME.sh)
+**Al terminar muestra:**
+- Dónde está la carpeta
+- Cómo copiarla a otro equipo (SCP o manual)
+- Qué comando correr en el otro equipo para importar
 
-| Opción | Función |
-|--------|---------|
-| `--export-server` | Exportar usuarios/grupos/Samba/config desde servidor |
-| `--create-nas` | Crear usuarios y grupos en NAS (desde export) |
-| `--acls` | ⚠️ AVISO: ACLs en repo `SCR-ACL-REP` (no usar aquí) |
-| `--full` | Exportar + crear (no ACLs) |
-| `--dry-run` | Simular sin cambios |
-| `--help` | Mostrar ayuda |
+### 3. Importar
+```
+→ 3: Importar configuración
+```
+- Busca carpetas en `src/export/`
+- Selecciona una
+- Crea usuarios, grupos, Samba locales
+
+### 4. Gestión de Exportaciones
+```
+→ 4: Gestión de exportaciones
+   → 1: Listar disponibles
+   → 2: Limpiar antiguas (>30 días)
+```
 
 ## Configuración (servers.env)
 
+**Mínima (por defecto, funciona así):**
 ```bash
-# Servidor origen
-SERVIDOR_ORIGEN_IP="192.168.x.x"
-SERVIDOR_ORIGEN_USER="root"
-
-# NAS destino
-NAS_IP="192.168.x.x"
-NAS_USER="soporte"
-NAS_PATH="/opt/scripts/SCR-DIAG-REP"
+REPO_PATH="/opt/scripts/SCR-DIAG-REP"
+EXPORT_PATH="${REPO_PATH}/src/export"
+LOG_DIR="${REPO_PATH}/logs"
+DATA_DIR="${REPO_PATH}/config/data"
 ```
+
+No necesitas IPs, SSH, ni permisos especiales.  
+**Si clonas en otro path:** actualiza `REPO_PATH` en servers.env.
 
 ## Logs
 ```bash
-# Ver últimos logs
-tail -f logs/*.log
-
-# Buscar errores
-grep ERROR logs/*.log
+tail -f logs/*.log        # Ver en tiempo real
+grep ERROR logs/*.log     # Buscar errores
 ```
 
 ## Troubleshooting
 
-### Permisos Denegados en Export
-**Error:** `Permission denied` al escribir en `src/export/`
+| Problema | Causa | Solución |
+|----------|-------|----------|
+| `Permission denied` en export | Permisos en `src/export/` | `sudo chown -R $USER: src/export` |
+| Usuario/Grupo duplicado | Ya existe en sistema | Script detecta y salta. Revisar logs |
+| Archivo export vacío | `usuarios.db` no existe | Crear primero en Gestión de usuarios (opción 6) |
+| Importar muestra (vacío) | Sin carpetas en `src/export/` | Ejecutar Exportar primero (opción 2) |
 
-**Causa:** Directorio sin permisos de escritura para el usuario que ejecuta el script.
-
-**Solución 1** (automática en el script):
-- Script valida permisos de `src/export/` y crea con `chmod 755` si no existe
-- Si falla, script muestra comando corrector
-
-**Solución 2** (manual si error persiste):
+**Ver logs:**
 ```bash
-sudo chown -R soporte:soporte /opt/scripts/SCR-DIAG-REP/src/export
-sudo chmod -R 755 /opt/scripts/SCR-DIAG-REP/src/export
+tail -50 logs/*.log
 ```
-
-### Usuario/Grupo Duplicado
-Scripts validan existencia antes de crear. Si falla, revisar logs:
-```bash
-tail -20 logs/*.log
-```
-
-### Contraseña Samba
-Por defecto usa `sambapass123`. Cambiar en `20_crear_identidades_nas.sh` línea ~76.
 
 ### ACLs y Permisos
-**No aplicar ACLs aquí.** Usar repo `SCR-ACL-REP`:
-- Define ACLs por compartir (share-level)
+**No aplicar aquí.** Usar repo `SCR-ACL-REP` después:
+- Define ACLs por proyecto/especialidad
 - Aplica setfacl por usuario/grupo
 - Gestiona inheritance y masks
 
 ---
 
-## Integración Repos
+## Integración con SCR-ACL-REP
 
-### SCR-DIAG-REP (Este)
-**Cuándo usar:**
-- ✅ Setup inicial nuevo equipo
-- ✅ Diagnóstico estado máquina
-- ✅ Replicar identidades servidor → NAS
+Después de replicar identidades aquí, usa `SCR-ACL-REP` para:
+1. Configurar perfiles y especialidades
+2. Aplicar ACLs por proyecto
+3. Auditoría de accesos
 
-**Salida (exports):**
-- `src/export/srv2_passwd.txt` → UIDs/GIDs (entrada SCR-ACL-REP)
-- `src/export/srv2_group.txt` → Grupos (entrada SCR-ACL-REP)
-- `src/export/srv2_samba_users.txt` → Usuarios Samba
-- `src/export/srv2_testparm.conf` → Config Samba
-- `src/export/srv2_smb.conf` → Backup smb.conf
-- `src/export/srv2_fstab.txt` → Mounts
+**Entrada SCR-ACL-REP:**
+- `src/export/usuarios.db`
+- `src/export/equipos.db`
 
-### SCR-ACL-REP (Otro Repo)
-**Cuándo usar:**
-- ✅ Configurar perfiles y especialidades
-- ✅ Cambio de accesos usuario (entra/sale proyecto)
-- ✅ Aplicar permisos por compartir
-
-**Entrada:**
-- `SCR-DIAG-REP/src/export/srv2_passwd.txt`
-- `SCR-DIAG-REP/src/export/srv2_group.txt`
-
-**Salida:**
-- ACLs POSIX aplicados (`setfacl`)
-- Logs auditoría
-
-### Secuencia Correcta
-1. **SCR-DIAG-REP** → Exportar identidades
-2. **SCR-DIAG-REP** → Crear usuarios/grupos en NAS
-3. **SCR-ACL-REP** → Aplicar ACLs y perfiles (consume export de SCR-DIAG-REP)
-
-## Bitácora
-Ver `BITACORA.md` para histórico cambios y versiones.
+**Ver:** `INTEGRACION.md` para detalles técnicos.
 
 ---
-**Autor:** IT+D | **Última actualización:** 2026-09-24
+**Autor:** IT+D | **Última actualización:** 2026-09-30

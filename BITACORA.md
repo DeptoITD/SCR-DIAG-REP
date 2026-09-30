@@ -3,9 +3,42 @@
 
 | Versión | Fecha | Responsable | Tipo | Descripción |
 |---|---|---|---|---|
+| v0.5 | 2026-09-30 | IT+D | Simplificación | Sin SSH/NAS automático. Flujo: Exportar → Copiar manual → Importar. Menú interactivo. |
 | v0.3 | 2026-09-24 | IT+D | Docs | Diagnóstico mejorado; Exportar config Samba; Crear solo usuarios/grupos; ACLs en repo separado |
 | v0.2 | 2026-09-24 | IT+D | Desarrollo | Estructura: diagnóstico, exportación, creación identidades, ACLs; utils y RUNME |
 | v0.1 | 2026-09-24 | IT+D | Creación | Creación inicial repo SCR-DIAG-REP (plantilla) |
+
+## Cambios v0.5 (2026-09-30) — Simplificación Flujo
+
+### Cambios Principales
+- **Sin SSH automático** → Usuario copia archivos manualmente (SCP, USB, Samba, etc.)
+- **Sin SSH automático** → Instrucciones copy-paste al terminar exportar
+- **servers.env mínimo** → Solo paths locales, sin IPs ni configuración SSH
+- **Menú simplificado** → Opción 4 ahora es "Gestión de exportaciones" (listar, limpiar)
+- **Flujo agnóstico** → Funciona igual en cualquier máquina en `/opt/scripts/SCR-DIAG-REP`
+
+### Archivos Modificados
+- **config/servers.env** — Remover NAS, solo paths locales. Agregar comentario sobre copia manual.
+- **src/utils.sh** — Agregar `mostrar_instrucciones_transfer()` con SCP + qué correr en otro equipo
+- **src/modules/exportar.sh** — Remover NAS sync. Llamar a `mostrar_instrucciones_transfer()` al final.
+- **src/modules/importar.sh** — Simplificar: buscar solo locales, mejor UI para seleccionar
+- **src/modules/sync.sh** — Remover SSH/NAS. Solo: listar exportaciones + limpiar antiguas
+- **src/menu.sh** — Actualizar títulos: opción 4 = "Gestión de exportaciones"
+- **README.md** — Flujo simplificado, instalación rápida, uso interactivo, troubleshooting mini
+
+### Ventajas
+- ✅ Sin dependencias SSH
+- ✅ Sin permisos sudoers
+- ✅ Sin configuración de NAS
+- ✅ Más fácil de entender ("copiar archivo, importar")
+- ✅ Funciona incluso desconectado de red (después de copiar)
+
+### Cómo Usar (Nuevo)
+1. Equipo A: `bash menu.sh → 2: Exportar` → Ve instrucciones
+2. Copia manual: `scp -r export_* otro_equipo:/opt/scripts/SCR-DIAG-REP/src/export/`
+3. Equipo B: `bash menu.sh → 3: Importar` → Selecciona carpeta → Crea usuarios/grupos
+
+---
 
 ## Cambios v0.3 (2026-09-24) — Integración SCR-ACL-REP
 

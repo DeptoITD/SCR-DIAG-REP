@@ -64,3 +64,53 @@ confirm() {
 pause() {
   read -r -p "Presione Enter para continuar..." _
 }
+
+mostrar_instrucciones_transfer() {
+  local export_dir="$1"
+  local export_name=$(basename "$export_dir")
+  local hostname=$(hostname -s)
+
+  echo ""
+  echo "╔════════════════════════════════════════════════════════════════╗"
+  echo "║           EXPORTACIÓN COMPLETADA                              ║"
+  echo "╚════════════════════════════════════════════════════════════════╝"
+  echo ""
+  echo "📁 Carpeta generada:"
+  echo "   $export_dir"
+  echo ""
+  echo "📋 Contenido:"
+  ls -lh "$export_dir" | tail -n +2 | awk '{print "   " $9 " (" $5 ")"}'
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "SIGUIENTE: Copiar archivos a otro equipo"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "1️⃣  OPCIÓN A: SCP (si tienes acceso SSH a otro equipo)"
+  echo "   Desde ESTE equipo, copia a otro:"
+  echo ""
+  echo "   scp -r '$export_dir' usuario@IP_OTRO_EQUIPO:/opt/scripts/SCR-DIAG-REP/src/export/"
+  echo ""
+  echo "   Ejemplo:"
+  echo "   scp -r '$export_dir' soporte@192.168.1.50:/opt/scripts/SCR-DIAG-REP/src/export/"
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "2️⃣  OPCIÓN B: Copia manual (USB, red compartida, etc.)"
+  echo "   Copia la carpeta:"
+  echo "   $export_dir"
+  echo ""
+  echo "   Pega en el otro equipo en:"
+  echo "   /opt/scripts/SCR-DIAG-REP/src/export/"
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "3️⃣  En el OTRO equipo, ejecuta:"
+  echo ""
+  echo "   cd /opt/scripts/SCR-DIAG-REP"
+  echo "   bash menu.sh"
+  echo "   → Opción 3: Importar / replicar configuración"
+  echo "   → Selecciona esta carpeta: $export_name"
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+}

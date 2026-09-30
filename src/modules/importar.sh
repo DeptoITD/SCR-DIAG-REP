@@ -10,33 +10,33 @@ importar_run() {
   source "$(dirname "$0")/usuarios.sh"
 
   local export_dir
-  local from_nas=false
 
-  # Opción: local o NAS
+  # Buscar carpetas disponibles
   echo ""
-  if [[ "$NAS_ENABLED" == "true" && -d "$NAS_EXPORT_PATH" ]]; then
-    echo "Fuentes disponibles:"
-    echo "  1) Local ($EXPORT_PATH)"
-    echo "  2) NAS ($NAS_EXPORT_PATH)"
-    read -r -p "Seleccione fuente [1|2]: " source_opt
-    if [[ "$source_opt" == "2" ]]; then
-      from_nas=true
-      export_base="$NAS_EXPORT_PATH"
-    else
-      export_base="$EXPORT_PATH"
-    fi
-  else
-    export_base="$EXPORT_PATH"
+  echo "📂 Carpetas disponibles en: $EXPORT_PATH"
+  local exports=($(ls -d "$EXPORT_PATH"/export_* 2>/dev/null | sort -r))
+
+  if [[ ${#exports[@]} -eq 0 ]]; then
+    error "No hay carpetas de exportación. Ejecuta primero: bash menu.sh → 2 (Exportar)"
+    return 1
   fi
 
-  # Seleccionar carpeta
   echo ""
-  echo "Carpetas disponibles en $export_base:"
-  ls -d "$export_base"/export_* 2>/dev/null | nl
-  read -r -p "Seleccione número de carpeta: " num
-  export_dir=$(ls -d "$export_base"/export_* 2>/dev/null | sed -n "${num}p")
+  for i in "${!exports[@]}"; do
+    local folder=$(basename "${exports[$i]}")
+    local size=$(du -sh "${exports[$i]}" 2>/dev/null | cut -f1)
+    echo "  $((i+1))) $folder ($size)"
+  done
+  echo ""
+  read -r -p "Selecciona número [1-${#exports[@]}]: " num
 
-  [[ -d "$export_dir" ]] || { error "Carpeta no válida"; return 1; }
+  # Validar selección
+  if ! [[ "$num" =~ ^[0-9]+$ ]] || (( num < 1 || num > ${#exports[@]} )); then
+    error "Opción inválida"
+    return 1
+  fi
+
+  export_dir="${exports[$((num-1))]}"
 
   log "Importando desde: $export_dir"
 
