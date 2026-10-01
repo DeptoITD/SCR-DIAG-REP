@@ -1,8 +1,10 @@
 #!/bin/bash
 # sync.sh — Listar exportaciones disponibles (sin NAS, copiar manualmente)
 
-[[ -z "$REPO_PATH" ]] && source "$(dirname "$0")/../config/servers.env"
-[[ -z "$log" ]] && source "$(dirname "$0")/../utils.sh"
+if [[ "$(type -t log)" != "function" ]]; then
+  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || source "$(dirname "$0")/../config/servers.env"
+  source "${REPO_PATH:-$(dirname "$0")/..}/src/utils.sh" 2>/dev/null || source "$(dirname "$0")/../utils.sh"
+fi
 
 sync_list_all() {
   echo ""

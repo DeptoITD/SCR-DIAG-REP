@@ -3,8 +3,10 @@
 # Nota: "equipo" aquí = equipo de trabajo/departamento (IND_ARQ, IND_BIM, etc.)
 #       NO = máquina física (eso se llama "máquina/host" en el menú de diagnóstico)
 
-[[ -z "$REPO_PATH" ]] && source "$(dirname "$0")/../config/servers.env"
-[[ -z "$log" ]] && source "$(dirname "$0")/../utils.sh"
+if [[ "$(type -t log)" != "function" ]]; then
+  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || source "$(dirname "$0")/../config/servers.env"
+  source "${REPO_PATH:-$(dirname "$0")/..}/src/utils.sh" 2>/dev/null || source "$(dirname "$0")/../utils.sh"
+fi
 
 equipo_listar() {
   local db="${DATA_DIR}/equipos.db"

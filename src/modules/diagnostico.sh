@@ -1,8 +1,11 @@
 #!/bin/bash
 # diagnostico.sh — Diagnóstico de máquina (console-only por defecto)
 
-[[ -z "$REPO_PATH" ]] && source "$(dirname "$0")/../config/servers.env"
-[[ -z "$log" ]] && source "$(dirname "$0")/../utils.sh"
+# utils.sh + servers.env already sourced by menu.sh, but allow standalone calls
+if [[ "$(type -t log)" != "function" ]]; then
+  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || source "$(dirname "$0")/../config/servers.env"
+  source "${REPO_PATH:-$(dirname "$0")/..}/src/utils.sh" 2>/dev/null || source "$(dirname "$0")/../utils.sh"
+fi
 
 diagnostico_run() {
   local output_file=""
