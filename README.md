@@ -1,9 +1,13 @@
 # SCR-DIAG-REP
-**Categoría:** Script | **Fecha:** 2026-09-24 | **Depto:** IT+D  
-**Plataforma:** Linux (bash) | **Requisito:** `bash 4.0+`, `git`
+**Categoría:** Script | **Versión:** 0.7 | **Fecha:** 2026-10-02 | **Depto:** IT+D  
+**Plataforma:** Linux (bash) | **Requisito:** `bash 4.0+`, `sudo`, Samba, `pdbedit`
 
 ## Propósito
-Ejecutarse en **equipos Linux** para replicar identidades (usuarios, grupos, Samba) + diagnosticar máquina (SMB, ACLs, storage, RAID, LVM).
+Replicar **identidades Linux + credenciales Samba** entre equipos de forma segura y auditable.
+- Carga masiva usuarios desde CSV
+- Exportación completa (usuarios, grupos, credenciales)
+- Importación inteligente (análisis SID, sincronización, dry-run)
+- Migración bidireccional segura (SERVER ↔ NAS)
 
 **Flujo Simple:**
 ```
