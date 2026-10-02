@@ -227,3 +227,75 @@ menu_personalizado() {
 
   echo "${seleccion%,}"
 }
+
+# ============================================================================
+# FUNCIONES PARA MIGRACIÓN SAMBA COMPLETA
+# ============================================================================
+
+detectar_samba_sid() {
+  local source="${1:-}"
+  if [[ -n "$source" ]]; then
+    grep "samba_sid=" "$source" 2>/dev/null | cut -d= -f2
+  else
+    pdbedit -P -v 2>/dev/null | grep "Machine SID" | awk '{print $NF}'
+  fi
+}
+
+verificar_conflictos_uid_gid() {
+  local export_dir="$1"
+  [[ ! -f "$export_dir/usuarios_linux.txt" ]] && return 0
+
+  echo ""
+  echo "═══════════════════════════════════════════════════════"
+  echo "  Verificación de Conflictos UID/GID"
+  echo "═══════════════════════════════════════════════════════"
+  echo ""
+
+  local conflictos=0
+  while IFS=: read -r user _ uid gid _; do
+    [[ -z "$user" ]] && continue
+    if getent passwd "$uid" &>/dev/null; then
+      local owner=$(getent passwd "$uid" | cut -d: -f1)
+      if [[ "$owner" != "$user" ]]; then
+        echo "  ⚠️  UID $uid en uso por: $owner (origen: $user)"
+        ((conflictos++))
+      fi
+    fi
+  done < "$export_dir/usuarios_linux.txt"
+
+  [[ $conflictos -eq 0 ]] && echo "  ✅ Sin conflictos UID/GID"
+  echo ""
+  return $conflictos
+}
+
+rollback_linux() {
+  local backup_dir="${1:-}"
+  echo ""
+  echo "⚠️  ROLLBACK — Restaurando identidades Linux..."
+  [[ -f "$backup_dir/passwd.bak" ]] && { sudo cp "$backup_dir/passwd.bak" /etc/passwd; info "✓ passwd"; }
+  [[ -f "$backup_dir/group.bak" ]] && { sudo cp "$backup_dir/group.bak" /etc/group; info "✓ group"; }
+  echo ""
+}
+
+rollback_samba() {
+  local backup_dir="${1:-}"
+  echo ""
+  echo "⚠️  ROLLBACK — Restaurando Samba..."
+  [[ -f "$backup_dir/passdb.tdb.bak" ]] && { sudo cp "$backup_dir/passdb.tdb.bak" /var/lib/samba/private/passdb.tdb; info "✓ passdb.tdb"; }
+  sudo systemctl restart smbd 2>/dev/null
+  echo ""
+}
+
+advertencia_secrets_tdb() {
+  echo ""
+  echo "╔════════════════════════════════════════════════════════════╗"
+  echo "║  ⚠️  ADVERTENCIA: CAMBIO DE SID (NO RECOMENDADO)          ║"
+  echo "╚════════════════════════════════════════════════════════════╝"
+  echo ""
+  echo "secrets.tdb contiene SID ÚNICO de máquina."
+  echo "Importarlo ROMPE: dominios, réplica, relaciones de confianza."
+  echo ""
+  echo "✅ RECOMENDADO: Restaurar solo hashes (passdb.tdb)"
+  echo "🔴 RIESGO: Importar secrets.tdb solo si SEGURO qué haces"
+  echo ""
+}
