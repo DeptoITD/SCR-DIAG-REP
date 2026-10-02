@@ -76,8 +76,10 @@ Ejemplo JSON:
 
 ## Uso
 
+Ejecutar en **cualquier equipo Linux con acceso a este repositorio**:
+
 ```bash
-cd SCR-DIAG-REP
+cd /opt/scripts/SCR-DIAG-REP  # o ruta local
 bash src/menu.sh
 
 → opción 6 (Gestión de usuarios)
@@ -86,6 +88,10 @@ bash src/menu.sh
 → confirmar
 → archivos JSON generados en config/export/
 ```
+
+Luego, **copiar JSONs a equipos destino:**
+- `config/export/usuarios_servidor.json` → `/tmp/` en srv-2
+- `config/export/usuarios_nas.json` → `/tmp/` en nas
 
 ## Próximos Pasos (SCR-ACLs_Indesco)
 
