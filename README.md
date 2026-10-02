@@ -1,8 +1,9 @@
 # SCR-DIAG-REP
-**Categoría:** Script | **Fecha:** 2026-09-24 | **Depto:** IT+D
+**Categoría:** Script | **Fecha:** 2026-09-24 | **Depto:** IT+D  
+**Plataforma:** Linux (bash) | **Requisito:** `bash 4.0+`, `git`
 
 ## Propósito
-Replicar identidades (usuarios, grupos, Samba) + diagnosticar máquina (SMB, ACLs, storage, RAID, LVM).
+Ejecutarse en **equipos Linux** para replicar identidades (usuarios, grupos, Samba) + diagnosticar máquina (SMB, ACLs, storage, RAID, LVM).
 
 **Flujo Simple:**
 ```

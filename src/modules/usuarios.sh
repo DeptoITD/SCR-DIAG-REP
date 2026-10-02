@@ -181,7 +181,8 @@ menu_usuarios() {
     echo "2. Crear usuario"
     echo "3. Editar usuario"
     echo "4. Eliminar usuario"
-    echo "5. Volver"
+    echo "5. Carga masiva de usuarios"
+    echo "6. Volver"
     read -r -p "Opción: " opt
 
     case "$opt" in
@@ -189,7 +190,8 @@ menu_usuarios() {
       2) usuario_crear ;;
       3) usuario_editar ;;
       4) usuario_eliminar ;;
-      5) break ;;
+      5) menu_carga_masiva ;;
+      6) break ;;
       *) error_soft "Opción inválida" ;;
     esac
   done

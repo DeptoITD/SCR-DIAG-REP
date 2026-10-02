@@ -114,3 +114,116 @@ mostrar_instrucciones_transfer() {
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
 }
+
+# ============================================================================
+# FUNCIONES PARA IMPORTACIÓN INTELIGENTE
+# ============================================================================
+
+validar_ruta() {
+  local ruta="$1"
+  [[ -z "$ruta" ]] && { error "Ruta requerida"; return 1; }
+  [[ ! -d "$ruta" ]] && { error "Ruta no existe: $ruta"; return 1; }
+  findmnt -T "$ruta" >/dev/null 2>&1 || { error "Ruta no está montada o accesible: $ruta"; return 1; }
+  return 0
+}
+
+analizar_smb_conf() {
+  local archivo="$1"
+  [[ ! -f "$archivo" ]] && { error "Archivo no encontrado: $archivo"; return 1; }
+
+  echo "═══════════════════════════════════════════════════════"
+  echo "  Análisis smb.conf — Políticas Portables"
+  echo "═══════════════════════════════════════════════════════"
+  echo ""
+
+  echo "[GLOBAL] — Configuración de seguridad (PORTABLE):"
+  grep -E "^\s*(security|acl_xattr|hide unreadable|follow symlinks|unix extensions|smb encrypt)" "$archivo" 2>/dev/null | sed 's/^/  /'
+
+  echo ""
+  echo "[SHARES] — Definidas en archivo:"
+  grep -E "^\[.*\]" "$archivo" 2>/dev/null | grep -v "^\[global\]" | grep -v "^\[IPC\$\]" | sed 's/^/  /'
+
+  echo ""
+  echo "⚠️  IMPORTANTE:"
+  echo "  - path, netbios name, server string: NO son portables"
+  echo "  - valid users: se configurará interactivamente"
+  echo ""
+}
+
+sincronizar_usuario() {
+  local user="$1" expected_grupo="$2" expected_extra="$3"
+  local actual_grupo actual_extra
+
+  if ! id "$user" &>/dev/null; then
+    echo "CREATE"
+    return 0
+  fi
+
+  actual_grupo=$(id -gn "$user" 2>/dev/null)
+  actual_extra=$(id -Gn "$user" 2>/dev/null | sed "s/.*$actual_grupo//")
+
+  if [[ "$actual_grupo" == "$expected_grupo" ]] && [[ "$actual_extra" == "$expected_extra" || -z "$expected_extra" ]]; then
+    echo "OK"
+  else
+    echo "SYNC"
+  fi
+}
+
+comparar_fstab() {
+  local fstab_export="$1"
+  [[ ! -f "$fstab_export" ]] && return 1
+
+  echo ""
+  echo "═══════════════════════════════════════════════════════"
+  echo "  Comparación /etc/fstab"
+  echo "═══════════════════════════════════════════════════════"
+  echo ""
+  echo "📁 Sistema ACTUAL (/etc/fstab):"
+  grep -v "^#" /etc/fstab 2>/dev/null | grep -v "^$" | head -5
+  echo ""
+  echo "📁 Sistema ORIGEN (fstab.txt):"
+  grep -v "^#" "$fstab_export" 2>/dev/null | grep -v "^$" | head -5
+  echo ""
+  echo "⚠️  REFERENCIA SOLO. /etc/fstab NO se modificará automáticamente."
+  echo ""
+}
+
+menu_seleccionar_importacion() {
+  echo ""
+  echo "═══════════════════════════════════════════════════════"
+  echo "  ¿QUÉ DESEAS IMPORTAR?"
+  echo "═══════════════════════════════════════════════════════"
+  echo ""
+  echo "1) Solo USUARIOS (crear nuevos, dejar existentes)"
+  echo "2) USUARIOS + GRUPOS (crear/actualizar)"
+  echo "3) USUARIOS + GRUPOS + MEMBRESÍAS"
+  echo "4) TODO ANTERIOR + CONFIG SAMBA"
+  echo "5) TODO (incluyendo fstab como referencia)"
+  echo "6) PERSONALIZADO (elige qué elemento)"
+  echo ""
+  read -r -p "Selecciona [1-6]: " opt
+
+  case "$opt" in
+    1) echo "usuarios" ;;
+    2) echo "usuarios,grupos" ;;
+    3) echo "usuarios,grupos,membresias" ;;
+    4) echo "usuarios,grupos,membresias,samba" ;;
+    5) echo "usuarios,grupos,membresias,samba,fstab" ;;
+    6) menu_personalizado ;;
+    *) error "Opción inválida"; return 1 ;;
+  esac
+}
+
+menu_personalizado() {
+  local seleccion=""
+  echo ""
+  echo "Marca qué importar (SÍ/NO):"
+
+  confirm "¿Importar USUARIOS?" && seleccion="${seleccion}usuarios,"
+  confirm "¿Importar GRUPOS?" && seleccion="${seleccion}grupos,"
+  confirm "¿Importar MEMBRESÍAS de grupos?" && seleccion="${seleccion}membresias,"
+  confirm "¿Importar CONFIG SAMBA?" && seleccion="${seleccion}samba,"
+  confirm "¿Mostrar FSTAB como referencia?" && seleccion="${seleccion}fstab,"
+
+  echo "${seleccion%,}"
+}

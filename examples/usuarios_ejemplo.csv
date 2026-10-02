@@ -1,0 +1,21 @@
+# Ejemplo de archivo para carga masiva de usuarios
+# Formato: usuario|nombre|grupo|dominio
+# usuario: identificador única, minúsculas con puntos/guiones
+# nombre: nombre completo
+# grupo: grupo primario (debe existir en equipos.db)
+# dominio: PROYECTOS, ADM, o COM
+
+# ========== PROYECTOS ==========
+julian.ochoa|Julian Ochoa|IND_GEN|PROYECTOS
+diana.molano|Diana Molano|IND_GEN|PROYECTOS
+juan.rojas|Juan Rojas|IND_ITD|PROYECTOS
+yeisson.guerrero|Yeisson Guerrero|IND_SGI|PROYECTOS
+sandra.nino|Sandra Niño|IND_SVC|PROYECTOS
+mayra.robles|Mayra Robles|TYF|PROYECTOS
+
+# ========== ADMIN ==========
+maria.admin|Maria Admin|ADM_SYSADMIN|ADM
+carlos.support|Carlos Support|ADM_SUPPORT|ADM
+
+# ========== COMERCIAL ==========
+luis.sales|Luis Sales|COM_SALES|COM

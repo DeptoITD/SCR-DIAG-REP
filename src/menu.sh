@@ -17,6 +17,7 @@ source "${SCRIPT_DIR}/modules/importar.sh"
 source "${SCRIPT_DIR}/modules/sync.sh"
 source "${SCRIPT_DIR}/modules/equipos.sh"
 source "${SCRIPT_DIR}/modules/usuarios.sh"
+source "${SCRIPT_DIR}/modules/carga_masiva.sh"
 
 main_menu() {
   while true; do
