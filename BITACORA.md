@@ -34,9 +34,34 @@
 - ✅ Funciona incluso desconectado de red (después de copiar)
 
 ### Cómo Usar (Nuevo)
-1. Equipo A: `bash menu.sh → 2: Exportar` → Ve instrucciones
+1. Equipo A: `bash src/menu.sh → 2: Exportar` → Ve instrucciones
 2. Copia manual: `scp -r export_* otro_equipo:/opt/scripts/SCR-DIAG-REP/src/export/`
-3. Equipo B: `bash menu.sh → 3: Importar` → Selecciona carpeta → Crea usuarios/grupos
+3. Equipo B: `bash src/menu.sh → 3: Importar` → Selecciona carpeta → Crea usuarios/grupos
+
+### Diferencias v3 → v5 (Qué cambió de documentos/flujo)
+
+| Aspecto | v0.3 | v0.5 |
+|---------|------|------|
+| **Entrada usuario** | RUNME.sh con flags (--export, --create, --acls) | Menú interactivo (bash src/menu.sh) |
+| **Archivos generados** | srv2_passwd.txt, srv2_group.txt, srv2_samba_users.txt, srv2_testparm.conf, srv2_smb.conf, srv2_fstab.txt | usuarios.db, equipos.db, group_membership.txt, manifest.txt, smb.conf, testparm.txt, fstab.txt, samba_users.txt |
+| **Transferencia** | Automática SSH + NAS (si configurado) | Manual (SCP, USB, Samba) + instrucciones copy-paste |
+| **Config** | servers.env con IPs, SSH, NAS | servers.env solo paths locales |
+| **ACLs** | Aquí mismo (30_crear_acls.sh) | Repo separado (SCR-ACL-REP) |
+| **Permisos** | Requiere sudoers config | No requiere (copia manual) |
+| **Agnóstico** | No (asume srv-2) | Sí (funciona cualquier máquina) |
+
+### Traza v3 (Archivos que ya NO se generan en v5)
+- ❌ `srv2_passwd.txt` — Reemplazado por `usuarios.db` (binaria)
+- ❌ `srv2_group.txt` — Reemplazado por `equipos.db` (binaria)
+- ❌ `srv2_smbpasswd.exp` — Ya no se genera (contraseñas en config/servers.env)
+- ✅ `srv2_samba_users.txt` → Renombrado `samba_users.txt` (sin prefijo)
+- ✅ `srv2_testparm.conf` → Renombrado `testparm.txt` (sin prefijo, sin .conf)
+- ✅ `srv2_smb.conf` → Ahora `smb.conf` (sin prefijo srv2_)
+- ✅ `srv2_fstab.txt` → Ahora `fstab.txt` (sin prefijo srv2_)
+- ✅ NUEVO: `usuarios.db` (base datos usuarios)
+- ✅ NUEVO: `equipos.db` (base datos equipos/grupos)
+- ✅ NUEVO: `group_membership.txt` (membresía grupos generada)
+- ✅ NUEVO: `manifest.txt` (metadata exportación)
 
 ---
 
@@ -94,39 +119,48 @@
 - [ ] Pruebas integración en CI/CD
 - [ ] Documentación ACLs avanzadas (inheritance, masks)
 
-## Notas de Uso
+## Notas de Uso (v0.5)
 
 ### Primer Run
 ```bash
 cd /opt/scripts/SCR-DIAG-REP
+sudo su
+bash src/menu.sh
 
-# 1. Verificar config
-nano config/servers.env
-
-# 2. Simulación
-bash src/scripts/RUNME.sh --dry-run
-
-# 3. Si todo OK, ejecutar
-bash src/scripts/RUNME.sh --full
+# 1. Opción 1: Diagnóstico (opcional, solo lectura)
+# 2. Opción 2: Exportar (genera export_hostname_YYYYMMDD_HHMMSS/)
+# 3. Sigue instrucciones en pantalla: copia manual a otro equipo
+# 4. En otro equipo: Opción 3: Importar
 ```
 
 ### Flujo típico
-1. Servidor exporta → `src/export/srv2_*.txt`
-2. NAS recibe archivos (git pull o SCP)
-3. NAS crea identidades → logs en `logs/`
-4. Verificar: `id usuario` en NAS
+1. Servidor exporta → `src/export/export_srv2_20261002_120000/` (con instrucciones)
+2. Copia manual: `scp -r export_* nas:/opt/scripts/SCR-DIAG-REP/src/export/`
+3. NAS importa → `bash src/menu.sh → 3: Importar` → Selecciona export → Crea usuarios
+4. Verificar: `getent passwd | grep -E "1[0-9]{3}:"` (ver usuarios creados)
 
-### Monitoreo
+### Monitoreo & Logs
+**Ver logs en tiempo real:**
 ```bash
-# Ver progress real-time
-tail -f logs/*.log
+tail -f logs/script_*.log
+```
 
-# Contar usuarios creados
-grep "Usuario creado:" logs/*.log | wc -l
+**Buscar errores:**
+```bash
+grep ERROR logs/script_*.log
+grep "require_root\|Permission denied" logs/script_*.log
+```
 
-# Buscar errores
-grep "ERROR\|Error\|error" logs/*.log
+**Ver detalle de importación:**
+```bash
+grep "Usuario\|Grupo\|Samba" logs/script_*.log
+```
+
+**Ver últimas operaciones:**
+```bash
+ls -lht logs/ | head -5
+cat logs/$(ls -t logs/script_*.log | head -1)
 ```
 
 ---
-**Última actualización:** 2026-09-24 v0.3 (Docs + Diagnóstico + Exportar config + ACLs separadas)
+**Última actualización:** 2026-10-02 v0.5 (Wiki + Logs + Comparativa v3→v5)

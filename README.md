@@ -117,11 +117,36 @@ DATA_DIR="${REPO_PATH}/config/data"
 No necesitas IPs, SSH, ni permisos especiales.  
 **Si clonas en otro path:** actualiza `REPO_PATH` en servers.env.
 
-## Logs
+## Logs & Monitoreo
+
+**Ubicación:** `logs/script_YYYYMMDD_HHMMSS.log`
+
+**Ver en tiempo real:**
 ```bash
-tail -f logs/*.log        # Ver en tiempo real
-grep ERROR logs/*.log     # Buscar errores
+tail -f logs/script_*.log
 ```
+
+**Buscar eventos específicos:**
+```bash
+grep "Usuario creado" logs/script_*.log        # Usuarios agregados
+grep "Grupo creado" logs/script_*.log          # Grupos agregados
+grep "ERROR\|error" logs/script_*.log          # Errores
+grep "Samba" logs/script_*.log                 # Operaciones Samba
+```
+
+**Estadísticas rápidas:**
+```bash
+wc -l logs/script_*.log                        # Líneas de log
+grep -c "Usuario creado" logs/script_*.log     # Total usuarios creados
+grep -c "\[ERROR\]" logs/script_*.log          # Total errores
+```
+
+**Último log completo:**
+```bash
+cat logs/$(ls -t logs/script_*.log | head -1)
+```
+
+**Ver detalles:** Ver `WIKI.md` para guía completa de troubleshooting.
 
 ## Troubleshooting
 
