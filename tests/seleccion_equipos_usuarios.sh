@@ -5,6 +5,16 @@ source src/utils.sh
 source src/modules/equipos.sh
 source src/modules/usuarios.sh
 DATA_DIR=$(mktemp -d)
+getent() {
+  [[ "$1" == group ]] || return 1
+  case "${2:-}" in
+    IND_PMO) echo 'IND_PMO:x:1002:' ;;
+    IND_ITD) echo 'IND_ITD:x:1007:' ;;
+    IND_VACIO) echo 'IND_VACIO:x:1008:' ;;
+    '') printf 'IND_PMO:x:1002:\nIND_ITD:x:1007:\nIND_VACIO:x:1008:\n' ;;
+    *) return 1 ;;
+  esac
+}
 trap 'rm -rf "$DATA_DIR"' EXIT
 printf '#grupo|display|gid\nIND_PMO|Oficina PMO|1002\nIND_ITD|IT+D|1007\nIND_VACIO|Vacío|1008\n' > "$DATA_DIR/equipos.db"
 printf '#user|nombre|primario|extra|uid\njhonatan.rojas|Jhonatan Rojas|IND_PMO|IND_ITD|1002\nsara|Sara|IND_ITD||1003\n' > "$DATA_DIR/usuarios.db"

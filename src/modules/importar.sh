@@ -91,12 +91,13 @@ importar_grupos_linux() {
     
     if getent group "$grupo" &>/dev/null; then
       echo "  [OK] $grupo"
-      ((ok++))
+      ok=$((ok+1))
     else
-      sudo groupadd -g "$gid" "$grupo" 2>/dev/null
+      sudo groupadd -g "$gid" "$grupo" 2>/dev/null || { echo "[!] No se pudo crear el grupo $grupo." >&2; return 1; }
       echo "  [CREATE] $grupo"
-      ((created++))
+      created=$((created+1))
     fi
+    registrar_grupo_catalogo "$grupo" || return 1
   done < "$export_dir/grupos_linux.txt"
   
   echo "  → $created creados, $ok ok"
@@ -170,7 +171,9 @@ importar_run() {
 
   [[ "$seleccion" =~ fstab ]] && comparar_fstab "$export_dir/fstab.txt"
   
-  [[ "$seleccion" =~ grupos ]] && importar_grupos_linux "$export_dir"
+  if [[ "$seleccion" =~ grupos ]]; then
+    importar_grupos_linux "$export_dir" || return 1
+  fi
   [[ "$seleccion" =~ usuarios ]] && importar_usuarios_linux "$export_dir"
   [[ "$seleccion" =~ membresias ]] && importar_membresias "$export_dir"
   [[ "$seleccion" =~ samba ]] && importar_samba_hashes "$export_dir"

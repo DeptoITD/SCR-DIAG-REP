@@ -119,9 +119,42 @@ mostrar_instrucciones_transfer() {
 # FUNCIONES PARA IMPORTACIÓN INTELIGENTE
 # ============================================================================
 
+# El catálogo conserva nombres/descripciones y utiliza los GID reales de Linux.
+registrar_grupo_catalogo() {
+  local grupo="$1" registro gid temporal db="${DATA_DIR}/equipos.db"
+  registro=$(getent group "$grupo") || return 1
+  IFS=: read -r grupo _ gid _ <<< "$registro"
+  [[ -n "$grupo" && "$gid" =~ ^[0-9]+$ ]] || return 1
+  mkdir -p "$DATA_DIR" || return 1
+  [[ -f "$db" ]] || : > "$db"
+  temporal=$(mktemp "$DATA_DIR/equipos.XXXXXX") || return 1
+  if awk -F'|' -v OFS='|' -v grupo="$grupo" -v gid="$gid" -v fecha="$(date +%Y-%m-%d)" '
+    $1 == grupo { if (!found++) { $3=gid; print }; next }
+    { print }
+    END { if (!found) print grupo,grupo,gid,"Grupo Linux",fecha }
+  ' "$db" > "$temporal" && chmod --reference="$db" "$temporal" && mv "$temporal" "$db"; then
+    return 0
+  fi
+  rm -f "$temporal"
+  return 1
+}
+
+sincronizar_catalogo_grupos() {
+  local registros grupo resto errores=0
+  registros=$(getent group) || { echo '[!] No se pudo consultar los grupos Linux.' >&2; return 1; }
+  while IFS=: read -r grupo resto; do
+    [[ -z "$grupo" ]] && continue
+    registrar_grupo_catalogo "$grupo" || { echo "[!] No se pudo registrar el grupo $grupo." >&2; errores=$((errores+1)); }
+  done <<< "$registros"
+  ((errores == 0))
+}
+
 # stdout contiene solo la selección; los menús se muestran por stderr.
 seleccionar_registro() {
   local archivo="$1" titulo="$2" modo="${3:-uno}"
+  if [[ "$archivo" == "${DATA_DIR}/equipos.db" ]]; then
+    sincronizar_catalogo_grupos || return 1
+  fi
   local clave nombre resto entrada numero resultado="" item
   local claves=() numeros=()
   [[ -f "$archivo" ]] || { echo "[!] No existe: $archivo" >&2; return 1; }

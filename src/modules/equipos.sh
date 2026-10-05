@@ -9,11 +9,12 @@ if [[ "$(type -t log)" != "function" ]]; then
 fi
 
 equipo_listar() {
+  sincronizar_catalogo_grupos || return 1
   local db="${DATA_DIR}/equipos.db"
   [[ ! -f "$db" ]] && { error "No existe: $db"; return 1; }
 
   echo ""
-  echo "=== Equipos (departamentos) ==="
+  echo "=== Equipos y grupos Linux ==="
   echo "Grupo        | Display       | GID  | Descripción"
   echo "-------------|---------------|------|------------------------------------------"
   while IFS='|' read -r grupo display gid desc created; do
@@ -35,10 +36,9 @@ equipo_crear() {
   read -r -p "Nombre display (ej: Nuevo Equipo): " display
   read -r -p "Descripción: " desc
 
-  # Obtener próximo GID (máx de la lista + 1)
-  gid=$(($(awk -F'|' 'NR>1 {print $3}' "$db" | sort -n | tail -1) + 1))
-
-  sudo groupadd -g "$gid" "$grupo" || { error "Error creando grupo Linux"; return 1; }
+  # Linux asigna un GID libre; el catálogo también contiene grupos de sistema.
+  sudo groupadd "$grupo" || { error "Error creando grupo Linux"; return 1; }
+  gid=$(getent group "$grupo" | cut -d: -f3)
 
   created=$(date +%Y-%m-%d)
   echo "${grupo}|${display}|${gid}|${desc}|${created}" >> "$db"

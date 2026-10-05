@@ -86,6 +86,11 @@ aplicar_carga_masiva() {
   for linea in "${USUARIOS_LEIDOS[@]}"; do
     IFS='|' read -r usuario nombre grupo dominio uid password <<< "$linea"
     estado=OMITIDO
+    if ! registrar_grupo_catalogo "$grupo"; then
+      echo "[!] No se pudo guardar el grupo $grupo en el catálogo." >&2
+      USUARIOS_LEIDOS=()
+      return 1
+    fi
     if id "$usuario" >/dev/null 2>&1; then
       omitidos=$((omitidos+1))
       echo "[OMITIDO] $usuario ya existe; conserva su contraseña."

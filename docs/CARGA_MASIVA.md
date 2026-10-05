@@ -23,3 +23,9 @@ La opción aplica la carga en el equipo donde se ejecuta; ya no genera instrucci
 El CSV de entrada contiene contraseñas en texto y debe mantenerse con permisos restringidos, por ejemplo `chmod 600 archivo.csv` en Linux.
 
 Referencia de los indicadores Samba: [pdbedit](https://www.samba.org/samba/docs/4.8/man-html/pdbedit.8.html).
+
+## Catálogo de grupos
+
+La carga masiva registra los grupos usados en `config/data/equipos.db`, incluso cuando el usuario ya existe. La importación registra cada grupo creado o encontrado, con el GID real del destino. Los nombres visibles, descripciones y fechas existentes se conservan; los grupos nuevos usan su nombre Linux como nombre visible.
+
+Listar equipos o seleccionar grupos sincroniza automáticamente todos los grupos que devuelve `getent group`, incluidos los grupos de sistema. Para completar el catálogo de un NAS existente, actualiza el repositorio, ejecuta `sudo bash src/menu.sh` y selecciona **5 → 1**. No se recrean grupos ni se modifican sus GID, usuarios o contraseñas.
