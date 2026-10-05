@@ -90,7 +90,7 @@ aplicar_carga_masiva() {
       omitidos=$((omitidos+1))
       echo "[OMITIDO] $usuario ya existe; conserva su contraseña."
     else
-      opciones=(-m -g "$grupo" -c "$nombre")
+      opciones=(-M -d /nonexistent -s /usr/sbin/nologin -g "$grupo" -c "$nombre")
       [[ -n "$uid" ]] && opciones+=(-u "$uid")
       if ! useradd "${opciones[@]}" "$usuario"; then
         estado=ERROR_CREACION
@@ -130,6 +130,7 @@ carga_masiva_workflow() {
   echo 'El UID puede quedar vacío. Las contraseñas se usan tal cual, sin vencimiento.'
   echo 'Los grupos deben existir en Linux. El dominio se registra como referencia.'
   echo 'Los usuarios existentes se omiten y conservan sus contraseñas.'
+  echo 'Las cuentas nuevas son solo para Samba: sin carpeta personal ni consola/SSH.'
   read -r -p 'Ruta del archivo CSV: ' archivo || return 1
   archivo="${archivo/#\~/$HOME}"
   leer_csv "$archivo" || return 1

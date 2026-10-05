@@ -53,7 +53,7 @@ usuario_crear() {
   fi
 
   # Crear usuario Linux
-  sudo useradd -m -u "$uid" -g "$prim_grupo" -c "$full_name" "$user" || { error "Error creando usuario Linux"; return 1; }
+  sudo useradd -M -d /nonexistent -s /usr/sbin/nologin -u "$uid" -g "$prim_grupo" -c "$full_name" "$user" || { error "Error creando usuario Linux"; return 1; }
 
   # Generar password
   pass=$(generate_password)

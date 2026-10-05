@@ -27,6 +27,8 @@ leer_csv "$temp_dir/input" > "$temp_dir/resumen"
 [[ ${#USUARIOS_LEIDOS[@]} == 2 ]]
 [[ "${USUARIOS_LEIDOS[0]}" == 'nuevo|Nombre Ñ|IND_PMO|COR|2001| pass$! fijo ' ]]
 aplicar_carga_masiva > "$temp_dir/resultado"
+grep -Fq -- '-M -d /nonexistent -s /usr/sbin/nologin' "$temp_dir/useradd"
+if grep -q -- '-m ' "$temp_dir/useradd"; then exit 1; fi
 grep -Fqx 'nuevo: pass$! fijo ' "$temp_dir/password_linux"
 [[ $(grep -Fc ' pass$! fijo ' "$temp_dir/password_samba") == 2 ]]
 grep -Fq -- '-M -1 -I -1 -E -1' "$temp_dir/chage"

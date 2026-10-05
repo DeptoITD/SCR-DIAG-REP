@@ -69,7 +69,7 @@ importar_usuarios_linux() {
         ((sync++))
       fi
     else
-      sudo useradd -u "$uid" -g "$gid" -c "$gecos" -d "$home" -s "$shell" "$user" 2>/dev/null
+      sudo useradd -M -u "$uid" -g "$gid" -c "$gecos" -d /nonexistent -s /usr/sbin/nologin "$user" 2>/dev/null
       echo "  [CREATE] $user"
       ((created++))
     fi
