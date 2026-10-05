@@ -5,6 +5,7 @@ source src/utils.sh
 source src/modules/equipos.sh
 source src/modules/usuarios.sh
 DATA_DIR=$(mktemp -d)
+net() { return 0; }
 getent() {
   [[ "$1" == group ]] || return 1
   case "${2:-}" in

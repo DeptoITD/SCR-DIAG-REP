@@ -97,7 +97,10 @@ importar_grupos_linux() {
       echo "  [CREATE] $grupo"
       created=$((created+1))
     fi
-    registrar_grupo_catalogo "$grupo" || return 1
+    if es_grupo_trabajo "$grupo"; then
+      asegurar_grupo_samba "$grupo" || return 1
+      registrar_grupo_catalogo "$grupo" || return 1
+    fi
   done < "$export_dir/grupos_linux.txt"
   
   echo "  → $created creados, $ok ok"

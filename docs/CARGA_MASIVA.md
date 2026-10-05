@@ -10,7 +10,7 @@ usuario|nombre|grupo|dominio|uid|password
 
 - `uid` puede quedar vacío para asignación automática. Un UID explícito debe estar libre en el destino.
 - `password` es la contraseña definitiva: se conserva exactamente, incluidos espacios. No admite `|`, `:`, saltos de línea ni valor vacío.
-- El grupo debe existir en Linux. El dominio es una referencia en la auditoría, no se configura un dominio Samba ni se asigna un grupo adicional con ese valor.
+- Los grupos de trabajo admitidos son `IND_*`, `COR`, `OPE`, `COM` y `GEN`. Si faltan, la carga crea su grupo Linux y lo registra en Samba con `net groupmap add`. El dominio del CSV es una referencia en la auditoría, no configura un dominio Samba ni agrega una membresía.
 - Se validan todas las filas antes de confirmar. Un error impide aplicar el archivo completo.
 - Las cuentas existentes se omiten sin modificar sus credenciales.
 - Las nuevas cuentas de carga masiva, creación individual e importación se crean con `-M -d /nonexistent -s /usr/sbin/nologin`: sin carpeta personal y sin sesión de consola, shell SSH o SFTP. Los UID y grupos siguen disponibles para Samba.
@@ -28,4 +28,6 @@ Referencia de los indicadores Samba: [pdbedit](https://www.samba.org/samba/docs/
 
 La carga masiva registra los grupos usados en `config/data/equipos.db`, incluso cuando el usuario ya existe. La importación registra cada grupo creado o encontrado, con el GID real del destino. Los nombres visibles, descripciones y fechas existentes se conservan; los grupos nuevos usan su nombre Linux como nombre visible.
 
-Listar equipos o seleccionar grupos sincroniza automáticamente todos los grupos que devuelve `getent group`, incluidos los grupos de sistema. Para completar el catálogo de un NAS existente, actualiza el repositorio, ejecuta `sudo bash src/menu.sh` y selecciona **5 → 1**. No se recrean grupos ni se modifican sus GID, usuarios o contraseñas.
+Listar equipos o seleccionar grupos incorpora los grupos de trabajo y registra su vínculo en Samba sin duplicar vínculos existentes. Para completar un NAS existente, actualiza el repositorio, ejecuta `sudo bash src/menu.sh` y selecciona **5 → 1**. Los grupos de sistema agregados por la versión anterior se retiran del catálogo, sin borrar ningún grupo del sistema. Se conservan GID, usuarios y contraseñas.
+
+En este servidor de Samba local, el grupo Linux sigue siendo necesario para permisos del sistema de archivos. El registro Samba lo vincula con una identidad Windows; no reemplaza el grupo Linux ni concede acceso a consola. Consulta los vínculos con `sudo net groupmap list`. Referencia: [net groupmap](https://www.samba.org/samba/docs/4.15/man-html/net.8.html).

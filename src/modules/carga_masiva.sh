@@ -29,8 +29,8 @@ leer_csv() {
       mensaje='Nombre completo vacío o con dos puntos.'
     elif [[ ! "$grupo" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]; then
       mensaje='Grupo inválido.'
-    elif ! getent group "$grupo" >/dev/null 2>&1; then
-      mensaje="El grupo $grupo no existe en Linux; créalo antes de cargar."
+    elif ! es_grupo_trabajo "$grupo"; then
+      mensaje='Grupo fuera del catálogo Samba: usa IND_NOMBRE, COR, OPE, COM o GEN.'
     elif [[ ! "$dominio" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]; then
       mensaje='Dominio vacío o inválido.'
     elif [[ -n "$uid" && ( ! "$uid" =~ ^[0-9]+$ || ${#uid} -gt 9 ) ]]; then
@@ -75,7 +75,7 @@ aplicar_carga_masiva() {
   local creados=0 omitidos=0 fallidos=0
   local -a opciones
   require_root
-  for comando in useradd chpasswd chage smbpasswd pdbedit getent; do
+  for comando in useradd groupadd chpasswd chage smbpasswd pdbedit getent net; do
     command -v "$comando" >/dev/null 2>&1 || { echo "[!] Falta $comando." >&2; return 1; }
   done
   mkdir -p "$DATA_DIR" "$EXPORT_PATH" || return 1
@@ -86,6 +86,10 @@ aplicar_carga_masiva() {
   for linea in "${USUARIOS_LEIDOS[@]}"; do
     IFS='|' read -r usuario nombre grupo dominio uid password <<< "$linea"
     estado=OMITIDO
+    if ! getent group "$grupo" >/dev/null 2>&1; then
+      groupadd "$grupo" || { echo "[!] No se pudo crear $grupo." >&2; USUARIOS_LEIDOS=(); return 1; }
+    fi
+    asegurar_grupo_samba "$grupo" || { echo "[!] No se pudo registrar $grupo en Samba." >&2; USUARIOS_LEIDOS=(); return 1; }
     if ! registrar_grupo_catalogo "$grupo"; then
       echo "[!] No se pudo guardar el grupo $grupo en el catálogo." >&2
       USUARIOS_LEIDOS=()
@@ -133,7 +137,7 @@ carga_masiva_workflow() {
   echo '=== Carga Masiva de Usuarios ==='
   echo 'Formato: usuario|nombre|grupo|dominio|uid|password'
   echo 'El UID puede quedar vacío. Las contraseñas se usan tal cual, sin vencimiento.'
-  echo 'Los grupos deben existir en Linux. El dominio se registra como referencia.'
+  echo 'Los grupos de trabajo faltantes se crean y registran en Samba. El dominio es una referencia.'
   echo 'Los usuarios existentes se omiten y conservan sus contraseñas.'
   echo 'Las cuentas nuevas son solo para Samba: sin carpeta personal ni consola/SSH.'
   read -r -p 'Ruta del archivo CSV: ' archivo || return 1

@@ -14,7 +14,7 @@ equipo_listar() {
   [[ ! -f "$db" ]] && { error "No existe: $db"; return 1; }
 
   echo ""
-  echo "=== Equipos y grupos Linux ==="
+  echo "=== Grupos de trabajo Samba ==="
   echo "Grupo        | Display       | GID  | Descripción"
   echo "-------------|---------------|------|------------------------------------------"
   while IFS='|' read -r grupo display gid desc created; do
@@ -30,6 +30,7 @@ equipo_crear() {
 
   read -r -p "Nombre del grupo (ej: IND_NUEVO): " grupo
   [[ -z "$grupo" ]] && { error "Nombre requerido"; return 1; }
+  es_grupo_trabajo "$grupo" || { echo '[!] Usa IND_NOMBRE, COR, OPE, COM o GEN.' >&2; return 1; }
 
   grep -q "^${grupo}|" "$db" && { error "Grupo ya existe: $grupo"; return 1; }
 
@@ -39,6 +40,7 @@ equipo_crear() {
   # Linux asigna un GID libre; el catálogo también contiene grupos de sistema.
   sudo groupadd "$grupo" || { error "Error creando grupo Linux"; return 1; }
   gid=$(getent group "$grupo" | cut -d: -f3)
+  asegurar_grupo_samba "$grupo" || { echo '[!] Grupo Linux creado, pero falló el registro Samba.' >&2; return 1; }
 
   created=$(date +%Y-%m-%d)
   echo "${grupo}|${display}|${gid}|${desc}|${created}" >> "$db"

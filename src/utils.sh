@@ -120,6 +120,21 @@ mostrar_instrucciones_transfer() {
 # ============================================================================
 
 # El catálogo conserva nombres/descripciones y utiliza los GID reales de Linux.
+es_grupo_trabajo() {
+  case "$1" in IND_*|COR|OPE|COM|GEN) return 0 ;; *) return 1 ;; esac
+}
+
+asegurar_grupo_samba() {
+  local grupo="$1" mapas
+  es_grupo_trabajo "$grupo" || return 0
+  getent group "$grupo" >/dev/null || return 1
+  mapas=$(net groupmap list) || return 1
+  if printf '%s\n' "$mapas" | awk -F' -> ' -v grupo="$grupo" '$2 == grupo {found=1} END {exit !found}'; then
+    return 0
+  fi
+  net groupmap add "unixgroup=$grupo" "ntgroup=$grupo" type=local >/dev/null
+}
+
 registrar_grupo_catalogo() {
   local grupo="$1" registro gid temporal db="${DATA_DIR}/equipos.db"
   registro=$(getent group "$grupo") || return 1
@@ -140,12 +155,21 @@ registrar_grupo_catalogo() {
 }
 
 sincronizar_catalogo_grupos() {
-  local registros grupo resto errores=0
+  local registros grupo resto errores=0 db="${DATA_DIR}/equipos.db" temporal
   registros=$(getent group) || { echo '[!] No se pudo consultar los grupos Linux.' >&2; return 1; }
   while IFS=: read -r grupo resto; do
     [[ -z "$grupo" ]] && continue
+    es_grupo_trabajo "$grupo" || continue
+    asegurar_grupo_samba "$grupo" || { echo "[!] No se pudo registrar $grupo en Samba." >&2; errores=$((errores+1)); }
     registrar_grupo_catalogo "$grupo" || { echo "[!] No se pudo registrar el grupo $grupo." >&2; errores=$((errores+1)); }
   done <<< "$registros"
+  # Retirar del catálogo las entradas de sistema añadidas por la sincronización anterior.
+  # No se borra ningún grupo de Linux ni de Samba.
+  if [[ -f "$db" ]]; then
+    temporal=$(mktemp "$DATA_DIR/equipos.XXXXXX") || return 1
+    awk -F'|' '$1 ~ /^#/ || $1 ~ /^IND_/ || $1 ~ /^(COR|OPE|COM|GEN)$/ || $4 != "Grupo Linux" {print}' "$db" > "$temporal" &&
+      chmod --reference="$db" "$temporal" && mv "$temporal" "$db" || return 1
+  fi
   ((errores == 0))
 }
 

@@ -7,6 +7,8 @@ temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT
 DATA_DIR="$temp_dir/data"; EXPORT_PATH="$temp_dir/export"
 require_root() { return 0; }
+groupadd() { return 0; }
+net() { [[ "$*" == 'groupmap list' ]] && echo 'IND_PMO (S-1-5-21-1-2-3-1000) -> IND_PMO'; return 0; }
 getent() {
   [[ "$1" == group && "${2:-}" != FALTANTE ]] || return 1
   printf '%s:x:2004:\n' "${2:-IND_PMO}"
