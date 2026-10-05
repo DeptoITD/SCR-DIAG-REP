@@ -47,24 +47,8 @@ chpasswd() { cat >/dev/null; return 1; }
 if aplicar_carga_masiva > "$temp_dir/resultado" 2>/dev/null; then exit 1; fi
 grep -q '0 creados, 0 omitidos, 1 errores' "$temp_dir/resultado"
 
-# Recuperar el fallo anterior sin crear cuentas ni tocar contraseñas.
-printf 'usuario|nombre|grupo|dominio|uid|estado\nnuevo|Nombre Ñ|IND_PMO|COR|2001|ERROR_VIGENCIA_SAMBA\n' > "$EXPORT_PATH/usuarios_entrada.csv"
-id() { case "$1" in -u) echo 2001;; -gn) echo IND_PMO;; *) return 0;; esac; }
-pdbedit() {
-  if [[ "$1" == -L ]]; then echo 'nuevo:2001:Nombre Ñ';
-  else [[ "$*" == '-u nuevo -c [X]' ]]; fi
-}
-useradd() { echo 'NO debe crear usuarios' >&2; exit 1; }
-chpasswd() { echo 'NO debe cambiar contraseñas' >&2; exit 1; }
-smbpasswd() { echo 'NO debe cambiar contraseñas' >&2; exit 1; }
-confirm() { return 0; }
-recuperar_vigencia_samba > "$temp_dir/recuperacion"
-grep -q RECUPERADO "$EXPORT_PATH/usuarios_entrada.csv"
-[[ $(wc -l < "$DATA_DIR/usuarios.db") == 1 ]]
-recuperar_vigencia_samba >/dev/null
-[[ $(wc -l < "$DATA_DIR/usuarios.db") == 1 ]]
-printf 'usuario|nombre|grupo|dominio|uid|estado\nnuevo|Nombre Ñ|IND_PMO|COR|9999|ERROR_VIGENCIA_SAMBA\n' > "$EXPORT_PATH/usuarios_entrada.csv"
-if recuperar_vigencia_samba > /dev/null 2>&1; then exit 1; fi
-grep -q ERROR_VIGENCIA_SAMBA "$EXPORT_PATH/usuarios_entrada.csv"
-[[ $(wc -l < "$DATA_DIR/usuarios.db") == 1 ]]
+menu_carga_masiva <<< 3 > "$temp_dir/menu"
+grep -q '1. Cargar usuarios desde archivo' "$temp_dir/menu"
+if grep -q '^4\.' "$temp_dir/menu"; then exit 1; fi
+if declare -F recuperar_vigencia_samba >/dev/null; then exit 1; fi
 echo 'OK: contraseñas exactas y permanentes, existentes omitidos, errores detectados y auditoría sin secretos.'

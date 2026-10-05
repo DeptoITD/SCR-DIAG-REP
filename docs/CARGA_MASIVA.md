@@ -19,21 +19,7 @@ usuario|nombre|grupo|dominio|uid|password
 
 La opción aplica la carga en el equipo donde se ejecuta; ya no genera instrucciones para scripts de aplicación externos ausentes.
 
-Si una carga anterior falló únicamente con `ERROR_VIGENCIA_SAMBA`, usa la opción **4. Recuperar cuentas con error de vigencia Samba** antes de cargar otro archivo. Lee el último resultado, verifica UID, grupo primario y existencia en Samba, aplica `[X]` y completa el registro sin cambiar contraseñas ni crear cuentas. Conserva un respaldo de la auditoría y evita registros duplicados. Otros errores requieren revisión manual.
 
 El CSV de entrada contiene contraseñas en texto y debe mantenerse con permisos restringidos, por ejemplo `chmod 600 archivo.csv` en Linux.
 
 Referencia de los indicadores Samba: [pdbedit](https://www.samba.org/samba/docs/4.8/man-html/pdbedit.8.html).
-
-## Revisar y convertir cuentas anteriores
-
-En el NAS, después de actualizar los scripts:
-
-```bash
-sudo bash src/revisar_acceso_samba.sh
-sudo bash src/revisar_acceso_samba.sh --aplicar
-```
-
-El primer comando solo muestra la revisión. El segundo convierte las cuentas normales de Samba o `usuarios.db` a `/nonexistent` y `/usr/sbin/nologin`. Preserva siempre `soporte`, `sara.albarracin`, `juan.rojas`, root y la cuenta que ejecuta sudo; no altera la configuración SSH, claves, contraseñas, UID, grupos ni credenciales Samba. Las excepciones Sara y Juan deben existir para aplicar; un nombre equivocado impide los cambios. Se pueden preservar excepciones adicionales con `--preservar nombre1,nombre2`.
-
-Guarda respaldo de `/etc/passwd` y un registro de home/shell anteriores en `logs/acceso-samba.*`. Las carpetas personales previas no se borran ni se mueven: revisa su contenido antes de eliminar datos. La revisión protege cuentas de sistema (UID inferior a 1000 o igual/superior a 65534).

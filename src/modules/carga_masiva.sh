@@ -144,51 +144,6 @@ carga_masiva_workflow() {
   echo 'Cancelado.'
 }
 
-recuperar_vigencia_samba() {
-  local auditoria="$EXPORT_PATH/usuarios_entrada.csv"
-  local usuario nombre grupo dominio uid estado resto temporal fecha
-  local recuperados=0 errores=0 pendientes
-  require_root
-  [[ -f "$auditoria" ]] || { echo '[!] No hay resultado anterior para recuperar.' >&2; return 1; }
-  pendientes=$(awk -F'|' '$6 == "ERROR_VIGENCIA_SAMBA" {n++} END {print n+0}' "$auditoria")
-  [[ "$pendientes" != 0 ]] || { echo 'No hay cuentas pendientes de vigencia Samba.'; return 0; }
-  echo "Se completarán $pendientes cuentas con ERROR_VIGENCIA_SAMBA, sin cambiar sus contraseñas."
-  confirm '¿Recuperar estas cuentas?' || return 0
-  fecha=$(date +%Y-%m-%d)
-  cp -p "$auditoria" "$auditoria.bak.$(date +%Y%m%d_%H%M%S)" || return 1
-  temporal=$(mktemp "$EXPORT_PATH/recuperacion.XXXXXX") || return 1
-  while IFS='|' read -r usuario nombre grupo dominio uid estado resto; do
-    if [[ "$estado" == ERROR_VIGENCIA_SAMBA ]]; then
-      if [[ ! "$usuario" =~ ^[a-z_][a-z0-9._-]*$ || ! "$uid" =~ ^[0-9]+$ ]] ||
-         [[ "$(id -u "$usuario" 2>/dev/null)" != "$uid" || "$(id -gn "$usuario" 2>/dev/null)" != "$grupo" ]]; then
-        echo "[!] $usuario: la cuenta Linux no coincide con el resultado anterior." >&2
-        errores=$((errores+1))
-      elif ! pdbedit -L -u "$usuario" 2>/dev/null | cut -d: -f1 | grep -Fxq "$usuario"; then
-        echo "[!] $usuario: no se encontró la cuenta Samba." >&2
-        errores=$((errores+1))
-      elif ! pdbedit -u "$usuario" -c '[X]' >/dev/null; then
-        echo "[!] $usuario: no se pudo establecer vigencia Samba." >&2
-        errores=$((errores+1))
-      elif [[ -f "$DATA_DIR/usuarios.db" ]] && awk -F'|' -v user="$usuario" '$1 == user {found=1} END {exit !found}' "$DATA_DIR/usuarios.db"; then
-        estado=RECUPERADO
-        recuperados=$((recuperados+1))
-        echo "[RECUPERADO] $usuario (ya registrado)."
-      elif printf '%s|%s|%s||%s|%s\n' "$usuario" "$nombre" "$grupo" "$uid" "$fecha" >> "$DATA_DIR/usuarios.db"; then
-        estado=RECUPERADO
-        recuperados=$((recuperados+1))
-        echo "[RECUPERADO] $usuario."
-      else
-        echo "[!] $usuario: no se pudo guardar el registro." >&2
-        errores=$((errores+1))
-      fi
-    fi
-    printf '%s|%s|%s|%s|%s|%s\n' "$usuario" "$nombre" "$grupo" "$dominio" "$uid" "$estado" >> "$temporal" || return 1
-  done < "$auditoria"
-  mv "$temporal" "$auditoria" || return 1
-  echo "Recuperación: $recuperados completados, $errores errores."
-  ((errores == 0))
-}
-
 menu_carga_masiva() {
   local opt
   while true; do
@@ -196,7 +151,6 @@ menu_carga_masiva() {
     echo '1. Cargar usuarios desde archivo'
     echo '2. Ver último resultado (sin contraseñas)'
     echo '3. Volver'
-    echo '4. Recuperar cuentas con error de vigencia Samba'
     read -r -p 'Opción: ' opt || return 0
     case "$opt" in
       1) carga_masiva_workflow ;;
@@ -204,7 +158,6 @@ menu_carga_masiva() {
            cut -d'|' -f1-4 "$EXPORT_PATH/usuarios_entrada.csv" | head -20
          else echo '[!] No hay cargas procesadas.' >&2; fi ;;
       3) return 0 ;;
-      4) recuperar_vigencia_samba ;;
       *) echo '[!] Opción inválida.' >&2 ;;
     esac
   done
