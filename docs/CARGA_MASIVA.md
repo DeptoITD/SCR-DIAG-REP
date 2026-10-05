@@ -31,3 +31,27 @@ La carga masiva registra los grupos usados en `config/data/equipos.db`, incluso 
 Listar equipos o seleccionar grupos incorpora los grupos de trabajo y registra su vínculo en Samba sin duplicar vínculos existentes. Para completar un NAS existente, actualiza el repositorio, ejecuta `sudo bash src/menu.sh` y selecciona **5 → 1**. Los grupos de sistema agregados por la versión anterior se retiran del catálogo, sin borrar ningún grupo del sistema. Se conservan GID, usuarios y contraseñas.
 
 En este servidor de Samba local, el grupo Linux sigue siendo necesario para permisos del sistema de archivos. El registro Samba lo vincula con una identidad Windows; no reemplaza el grupo Linux ni concede acceso a consola. Consulta los vínculos con `sudo net groupmap list`. Referencia: [net groupmap](https://www.samba.org/samba/docs/4.15/man-html/net.8.html).
+
+## Comprobar contraseñas guardadas en Samba
+
+En el NAS, ejecutar:
+
+```bash
+sudo bash src/verificar_credenciales_csv.sh /home/soporte/Downloads/usuarios_contrasenas_permanentes.csv
+```
+
+La comprobación compara el hash NT calculado a partir de cada contraseña del CSV con el hash local de Samba. No cambia cuentas, no intenta autenticaciones y no imprime contraseñas ni hashes. Requiere `pdbedit`, `iconv` y OpenSSL con MD4 (proveedor legacy en OpenSSL 3). Informa coincidencias, diferencias, cuentas ausentes y cuentas bloqueadas/deshabilitadas. Su éxito comprueba las contraseñas almacenadas; no comprueba red ni permisos de carpetas.
+
+Para una prueba de acceso real, usar `smbclient -L localhost -U genesis.bustos`: la contraseña se solicita de forma interactiva. Para comprobar permisos, conectarse a una carpeta concreta. No usar la contraseña en los argumentos del comando.
+
+Para Bitwarden, importar el CSV preparado como **Bitwarden (csv)**. Es un archivo de credenciales en texto: almacenarlo fuera del repositorio y eliminar la copia de transferencia cuando ya esté importado. Referencia: [formato CSV de Bitwarden](https://bitwarden.com/es-la/help/condition-bitwarden-import/).
+
+## Errores y respaldos
+
+La creación individual y el cambio de contraseña también establecen credenciales permanentes mediante `chpasswd`, dos entradas para `smbpasswd` y `[X]` en Samba. La creación usa un UID libre asignado por Linux y actualiza `usuarios.db` con las membresías reales.
+
+La importación detiene el flujo si falla un componente y no anuncia éxito. Omite cuentas de sistema y preserva las cuentas administrativas existentes; no cambia automáticamente el UID de una cuenta existente. Resuelve el grupo primario por nombre y usa su GID del destino. Los usuarios y membresías importados actualizan el catálogo. Los respaldos privados de Linux, catálogos y bases Samba se conservan bajo `logs/importacion.*`.
+
+La restauración de una base Samba detiene el servicio antes de copiarla, comprueba el reinicio e intenta restaurar el respaldo ante un fallo. Es una sustitución completa de la base, no una combinación de credenciales; revisar su alcance antes de confirmar. No se promete reversión completa de todas las altas y membresías.
+
+Renombrar equipos actualiza el vínculo Samba por SID y las referencias del catálogo de usuarios; cambiar descripciones también actualiza Samba. La eliminación comprueba miembros reales antes de borrar y conserva la fila del catálogo si falla Linux o Samba.

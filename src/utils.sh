@@ -5,6 +5,7 @@ log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
   echo "$msg"
   [[ -n "${LOG_FILE:-}" ]] && echo "$msg" >> "${LOG_FILE}"
+  return 0
 }
 
 error() {
@@ -18,6 +19,7 @@ info() {
   local msg="[INFO] $1"
   echo "$msg"
   [[ -n "${LOG_FILE:-}" ]] && echo "$msg" >> "${LOG_FILE}"
+  return 0
 }
 
 backup_file() {
@@ -120,6 +122,46 @@ mostrar_instrucciones_transfer() {
 # ============================================================================
 
 # El catálogo conserva nombres/descripciones y utiliza los GID reales de Linux.
+actualizar_campo_db() {
+  local db="$1" clave="$2" campo="$3" valor="$4" temporal
+  [[ "$valor" != *'|'* && "$valor" != *$'\n'* && "$valor" != *$'\r'* ]] || return 1
+  temporal=$(mktemp "${db}.XXXXXX") || return 1
+  cp -p "$db" "${db}.bak" || return 1
+  if awk -F'|' -v OFS='|' -v clave="$clave" -v campo="$campo" -v valor="$valor" '$1 == clave {$campo=valor} {print}' "$db" > "$temporal" &&
+    chmod --reference="$db" "$temporal" && mv "$temporal" "$db"; then return 0; fi
+  rm -f "$temporal"; return 1
+}
+
+registrar_usuario_catalogo() {
+  local user="$1" registro nombre gid uid home shell extra grupo grupos temporal db="$DATA_DIR/usuarios.db"
+  registro=$(getent passwd "$user") || return 1
+  IFS=: read -r user _ uid gid nombre home shell <<< "$registro"
+  grupo=$(id -gn "$user") || return 1
+  grupos=$(id -Gn "$user") || return 1
+  extra=''
+  for grupos in $grupos; do
+    [[ "$grupos" == "$grupo" ]] || extra="${extra:+$extra,}$grupos"
+  done
+  [[ "$nombre" != *'|'* ]] || return 1
+  mkdir -p "$DATA_DIR" || return 1
+  [[ -f "$db" ]] || : > "$db"
+  temporal=$(mktemp "${db}.XXXXXX") || return 1
+  if awk -F'|' -v OFS='|' -v user="$user" -v nombre="$nombre" -v grupo="$grupo" -v extra="$extra" -v uid="$uid" -v fecha="$(date +%Y-%m-%d)" '
+    $1 == user {if (!found++) print user,nombre,grupo,extra,uid,($6 != "" ? $6 : fecha); next}
+    {print} END {if (!found) print user,nombre,grupo,extra,uid,fecha}
+  ' "$db" > "$temporal" && chmod --reference="$db" "$temporal" && mv "$temporal" "$db"; then return 0; fi
+  rm -f "$temporal"; return 1
+}
+
+establecer_password_permanente() {
+  local user="$1" pass="$2"
+  printf '%s:%s\n' "$user" "$pass" | chpasswd || return 1
+  chage -m 0 -M -1 -I -1 -E -1 -d "$(date +%Y-%m-%d)" "$user" || return 1
+  printf '%s\n%s\n' "$pass" "$pass" | smbpasswd -s -a "$user" || return 1
+  smbpasswd -e "$user" || return 1
+  pdbedit -u "$user" -c '[X]' >/dev/null
+}
+
 es_grupo_trabajo() {
   case "$1" in IND_*|COR|OPE|COM|GEN) return 0 ;; *) return 1 ;; esac
 }
@@ -374,6 +416,8 @@ verificar_conflictos_uid_gid() {
   local conflictos=0
   while IFS=: read -r user _ uid gid _; do
     [[ -z "$user" ]] && continue
+    [[ "$uid" =~ ^[0-9]+$ ]] && ((uid >= 1000 && uid < 65534)) || continue
+    case "$user" in soporte|sara.albarracin|juan.rojas) continue ;; esac
     if getent passwd "$uid" &>/dev/null; then
       local owner=$(getent passwd "$uid" | cut -d: -f1)
       if [[ "$owner" != "$user" ]]; then

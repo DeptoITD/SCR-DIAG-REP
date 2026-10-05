@@ -113,6 +113,16 @@ Al importar grupos, se utiliza el GID real del destino para el catálogo y se re
 
 Antes de aplicar se muestran análisis y confirmación. El flujo vigente no ofrece un rollback automático al final; revisar los errores reportados y los respaldos disponibles. Importar `passdb.tdb` afecta la base de credenciales Samba del destino, y `secrets.tdb` puede cambiar su identidad: revisar cuidadosamente esas opciones.
 
+Las importaciones conservan los respaldos en `logs/importacion.*` y se detienen al fallar un componente. Las cuentas administrativas `soporte`, `sara.albarracin` y `juan.rojas` se omiten en la importación Linux y de membresías. Restaurar una base Samba completa sigue sustituyendo sus credenciales: esa operación no garantiza conservar las contraseñas del destino.
+
+## Comprobar las credenciales del CSV y Bitwarden
+
+```bash
+sudo bash src/verificar_credenciales_csv.sh /home/soporte/Downloads/usuarios_contrasenas_permanentes.csv
+```
+
+El resultado `[COINCIDE]` confirma que la contraseña del CSV coincide con la guardada en Samba y que no hay indicadores de bloqueo/deshabilitación. No muestra secretos ni modifica cuentas. No sustituye una prueba de permisos de carpetas. Ver [comprobación y formato Bitwarden](../docs/CARGA_MASIVA.md).
+
 ## Referencias
 
 - [Samba: net groupmap](https://www.samba.org/samba/docs/4.15/man-html/net.8.html).

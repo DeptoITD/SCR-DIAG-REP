@@ -49,70 +49,81 @@ equipo_crear() {
 }
 
 equipo_editar() {
-  local db="${DATA_DIR}/equipos.db"
-  local grupo old_grupo display gid desc created
-
+  require_root
+  local db="$DATA_DIR/equipos.db" grupo nuevo desc opt sid registro
   grupo=$(seleccionar_registro "$db" 'Equipo a editar') || return 1
-
-  grep -q "^${grupo}|" "$db" || { error "Grupo no existe: $grupo"; return 1; }
-
-  echo ""
-  echo "Opciones: 1) Renombrar, 2) Cambiar descripción, 3) Ver/Editar integrantes, 0) Volver"
-  read -r -p "Opción: " opt
-
+  echo '1) Renombrar, 2) Cambiar descripción, 3) Ver integrantes, 0) Volver'
+  read -r -p 'Opción: ' opt || return 1
   case "$opt" in
-    1)  # Renombrar
-      read -r -p "Nuevo nombre: " old_grupo
-      [[ -z "$old_grupo" ]] && return 1
-
-      # Actualizar Linux
-      sudo groupmod -n "$old_grupo" "$grupo" || { error "Error en groupmod"; return 1; }
-
-      # Actualizar DB
-      sed -i.bak "s/^${grupo}|/${old_grupo}|/" "$db"
-
-      # Cascada: usuarios.db
-      local usuarios_db="${DATA_DIR}/usuarios.db"
-      sed -i "s/|${grupo}|/|${old_grupo}|/g" "$usuarios_db"
-      sed -i "s/|${grupo}$/|${old_grupo}/" "$usuarios_db"
-
-      info "Grupo renombrado: $grupo → $old_grupo"
+    1)
+      read -r -p 'Nuevo nombre: ' nuevo || return 1
+      [[ "$nuevo" =~ ^[A-Z][A-Z0-9_]*$ ]] && es_grupo_trabajo "$nuevo" || { echo '[!] Nombre de grupo de trabajo inválido.' >&2; return 1; }
+      if getent group "$nuevo" >/dev/null; then echo '[!] Ese grupo ya existe.' >&2; return 1; fi
+      sid=$(sid_grupo_samba "$grupo") || return 1
+      sudo groupmod -n "$nuevo" "$grupo" || return 1
+      if ! net groupmap modify "sid=$sid" "unixgroup=$nuevo" "ntgroup=$nuevo"; then
+        sudo groupmod -n "$grupo" "$nuevo"
+        echo '[!] Falló el cambio Samba; se intentó revertir el nombre Linux.' >&2
+        return 1
+      fi
+      actualizar_campo_db "$db" "$grupo" 1 "$nuevo" || return 1
+      actualizar_referencias_grupo "$grupo" "$nuevo" || return 1
+      info "Grupo renombrado: $grupo → $nuevo"
       ;;
-    2)  # Cambiar descripción
-      read -r -p "Nueva descripción: " desc
-      # Extraer fila, cambiar desc, reescribir
-      local line=$(grep "^${grupo}|" "$db")
-      sed -i "s|^${grupo}|.*|${grupo}|$(echo "$line" | cut -d'|' -f2)|$(echo "$line" | cut -d'|' -f3)|${desc}|$(echo "$line" | cut -d'|' -f5)|" "$db"
-      info "Descripción actualizada"
+    2)
+      read -r -p 'Nueva descripción: ' desc || return 1
+      [[ "$desc" != *'|'* ]] || { echo '[!] La descripción no admite |.' >&2; return 1; }
+      sid=$(sid_grupo_samba "$grupo") || return 1
+      net groupmap modify "sid=$sid" "comment=$desc" || return 1
+      actualizar_campo_db "$db" "$grupo" 4 "$desc" || return 1
+      info 'Descripción actualizada en el catálogo y Samba.'
       ;;
-    3)  # Ver/Editar integrantes
-      equipo_ver_integrantes "$grupo"
-      ;;
+    3) equipo_ver_integrantes "$grupo" ;;
+    0) return 0 ;;
+    *) echo '[!] Opción inválida.' >&2; return 1 ;;
   esac
 }
 
-equipo_eliminar() {
-  local db="${DATA_DIR}/equipos.db"
-  local grupo
-
-  grupo=$(seleccionar_registro "$db" 'Equipo a eliminar') || return 1
-
-  grep -q "^${grupo}|" "$db" || { error "Grupo no existe"; return 1; }
-
-  # Verificar que ningún usuario lo tenga como grupo primario
-  if grep -q "|${grupo}|" "${DATA_DIR}/usuarios.db"; then
-    error "No se puede eliminar: hay usuarios con este como grupo primario"
-    return 1
-  fi
-
-  confirm "¿Eliminar grupo $grupo?" || return 1
-
-  sudo groupdel "$grupo" 2>/dev/null || warn "Advertencia: error eliminando grupo Linux"
-  sed -i "/^${grupo}|/d" "$db"
-
-  info "Grupo eliminado: $grupo"
+sid_grupo_samba() {
+  local mapas sid
+  mapas=$(net groupmap list) || return 1
+  sid=$(printf '%s\n' "$mapas" | awk -F' -> ' -v grupo="$1" '$2 == grupo {split($1,a,/[()]/); print a[2]; exit}')
+  [[ -n "$sid" ]] || { echo '[!] Falta el vínculo Samba del grupo.' >&2; return 1; }
+  printf '%s\n' "$sid"
 }
 
+actualizar_referencias_grupo() {
+  local old="$1" nuevo="$2" db="$DATA_DIR/usuarios.db" temporal
+  [[ -f "$db" ]] || return 0
+  cp -p "$db" "$db.bak" || return 1
+  temporal=$(mktemp "${db}.XXXXXX") || return 1
+  awk -F'|' -v OFS='|' -v old="$old" -v nuevo="$nuevo" '
+    {if ($3 == old) $3=nuevo; n=split($4,a,","); extra="";
+     for(i=1;i<=n;i++) {if(a[i]==old) a[i]=nuevo; if(a[i]!="") extra=extra (extra!="" ? "," : "") a[i]}; $4=extra; print}
+  ' "$db" > "$temporal" && chmod --reference="$db" "$temporal" && mv "$temporal" "$db"
+}
+
+equipo_eliminar() {
+  require_root
+  local grupo registro gid miembros sid db="$DATA_DIR/equipos.db" temporal
+  grupo=$(seleccionar_registro "$db" 'Equipo a eliminar') || return 1
+  registro=$(getent group "$grupo") || return 1
+  IFS=: read -r _ _ gid miembros <<< "$registro"
+  if [[ -n "$miembros" ]] || getent passwd | awk -F: -v gid="$gid" '$4 == gid {found=1} END {exit !found}'; then
+    echo '[!] No se puede eliminar un grupo con miembros primarios o adicionales.' >&2; return 1
+  fi
+  sid=$(sid_grupo_samba "$grupo") || return 1
+  confirm "¿Eliminar $grupo de Linux, Samba y catálogo?" || return 0
+  sudo groupdel "$grupo" || return 1
+  if ! net groupmap delete "sid=$sid"; then
+    sudo groupadd -g "$gid" "$grupo"
+    echo '[!] Falló la eliminación Samba; se intentó restaurar el grupo Linux.' >&2; return 1
+  fi
+  cp -p "$db" "$db.bak" || return 1
+  temporal=$(mktemp "${db}.XXXXXX") || return 1
+  awk -F'|' -v grupo="$grupo" '$1 != grupo' "$db" > "$temporal" && chmod --reference="$db" "$temporal" && mv "$temporal" "$db" || return 1
+  info "Grupo eliminado: $grupo"
+}
 equipo_ver_integrantes() {
   local grupo="${1:-}"
   local db="${DATA_DIR}/equipos.db"

@@ -36,6 +36,7 @@ usuario_crear() {
   id "$user" &>/dev/null && { error "Usuario ya existe"; return 1; }
 
   read -r -p "Nombre completo: " full_name
+  [[ "$full_name" != *'|'* && "$full_name" != *:* ]] || { echo '[!] Nombre completo inválido.' >&2; return 1; }
   prim_grupo=$(seleccionar_registro "$equipos_db" 'Grupo primario') || return 1
 
   # Validar grupo
@@ -44,7 +45,7 @@ usuario_crear() {
   extra_groups=$(seleccionar_registro "$equipos_db" 'Grupos adicionales' varios) || return 1
 
   # Obtener próximo UID
-  uid=$(($(awk -F'|' 'NR>1 {print $5}' "$usuarios_db" | sort -n | tail -1) + 1))
+  # Linux asigna un UID libre; no se calcula a partir de un catálogo parcial.
 
   # Crear grupo si no existe
   if ! getent group "$prim_grupo" &>/dev/null; then
@@ -53,29 +54,27 @@ usuario_crear() {
   fi
 
   # Crear usuario Linux
-  sudo useradd -M -d /nonexistent -s /usr/sbin/nologin -u "$uid" -g "$prim_grupo" -c "$full_name" "$user" || { error "Error creando usuario Linux"; return 1; }
+  sudo useradd -M -d /nonexistent -s /usr/sbin/nologin -g "$prim_grupo" -c "$full_name" "$user" || { error "Error creando usuario Linux"; return 1; }
+  uid=$(id -u "$user") || return 1
 
   # Generar password
   pass=$(generate_password)
-  echo "$pass" | sudo chpasswd -c SHA512 || { error "Error configurando contraseña"; return 1; }
-  sudo chage -d 0 "$user" || warn "Advertencia: error en chage"
+  establecer_password_permanente "$user" "$pass" || { echo '[!] La cuenta se creó parcialmente; falló la contraseña o Samba.' >&2; return 1; }
 
   # Agregar grupos adicionales
   if [[ -n "$extra_groups" ]]; then
     IFS=',' read -ra groups <<< "$extra_groups"
     for g in "${groups[@]}"; do
       g=$(echo "$g" | xargs)  # trim
-      sudo gpasswd -a "$user" "$g" 2>/dev/null || warn "No se pudo agregar a $g"
+      sudo gpasswd -a "$user" "$g" || return 1
     done
   fi
 
   # Registrar en Samba
-  echo "$pass" | sudo smbpasswd -a "$user" -s 2>/dev/null || warn "Advertencia: error en Samba"
-  sudo smbpasswd -e "$user" 2>/dev/null
 
   # Registrar en DB
   created=$(date +%Y-%m-%d)
-  echo "${user}|${full_name}|${prim_grupo}|${extra_groups}|${uid}|${created}" >> "$db"
+  registrar_usuario_catalogo "$user" || return 1
 
   info "Usuario creado: $user (uid=$uid)"
   mostrar_password_generada "$user" "$pass"
@@ -88,7 +87,8 @@ usuario_editar() {
 
   user=$(seleccionar_registro "$db" 'Usuario a editar') || return 1
 
-  line=$(grep "^${user}|" "$db") || { error "Usuario no existe"; return 1; }
+  line=$(awk -F'|' -v user="$user" '$1 == user {print; exit}' "$db")
+  [[ -n "$line" ]] || return 1
 
   echo ""
   echo "Opciones: 1) Nombre, 2) Contraseña, 3) Grupo primario, 4) Grupos adicionales, 0) Volver"
@@ -97,14 +97,14 @@ usuario_editar() {
   case "$opt" in
     1)  # Nombre
       read -r -p "Nuevo nombre: " full_name
-      sed -i "s/^${user}|\([^|]*\)|/&${full_name}|/" "$db"
-      sudo usermod -c "$full_name" "$user"
+      [[ "$full_name" != *'|'* ]] || return 1
+      sudo usermod -c "$full_name" "$user" || return 1
+      registrar_usuario_catalogo "$user" || return 1
       info "Nombre actualizado"
       ;;
     2)  # Contraseña
       local pass=$(generate_password)
-      echo "$pass" | sudo chpasswd -c SHA512 || { error "Error"; return 1; }
-      echo "$pass" | sudo smbpasswd -a "$user" -s 2>/dev/null
+      establecer_password_permanente "$user" "$pass" || return 1
       info "Contraseña actualizada"
       mostrar_password_generada "$user" "$pass"
       ;;
@@ -112,8 +112,8 @@ usuario_editar() {
       local new_grupo
       new_grupo=$(seleccionar_registro "${DATA_DIR}/equipos.db" 'Nuevo grupo primario') || return 1
       grep -q "^${new_grupo}|" "${DATA_DIR}/equipos.db" || { error "Grupo no existe"; return 1; }
-      sudo usermod -g "$new_grupo" "$user"
-      sed -i "s/^${user}|\([^|]*\)|\([^|]*\)|/${user}|\1|${new_grupo}|/" "$db"
+      sudo usermod -g "$new_grupo" "$user" || return 1
+      registrar_usuario_catalogo "$user" || return 1
       info "Grupo actualizado"
       ;;
     4)  # Grupos adicionales
@@ -126,7 +126,7 @@ usuario_editar() {
         IFS=',' read -ra old_groups <<< "$old_extra"
         for g in "${old_groups[@]}"; do
           g=$(echo "$g" | xargs)
-          sudo gpasswd -d "$user" "$g" 2>/dev/null
+          sudo gpasswd -d "$user" "$g" || return 1
         done
       fi
 
@@ -134,11 +134,11 @@ usuario_editar() {
         IFS=',' read -ra new_groups <<< "$new_extra"
         for g in "${new_groups[@]}"; do
           g=$(echo "$g" | xargs)
-          sudo gpasswd -a "$user" "$g" 2>/dev/null
+          sudo gpasswd -a "$user" "$g" || return 1
         done
       fi
 
-      sed -i "s/^${user}|\([^|]*\)|\([^|]*\)|\([^|]*\)|/${user}|\1|\2|${new_extra}|/" "$db"
+      registrar_usuario_catalogo "$user" || return 1
       info "Grupos actualizados"
       ;;
   esac
@@ -151,7 +151,8 @@ usuario_eliminar() {
 
   user=$(seleccionar_registro "$db" 'Usuario a eliminar') || return 1
 
-  line=$(grep "^${user}|" "$db") || { error "Usuario no existe"; return 1; }
+  line=$(awk -F'|' -v user="$user" '$1 == user {print; exit}' "$db")
+  [[ -n "$line" ]] || return 1
 
   echo ""
   echo "Perfil del usuario:"

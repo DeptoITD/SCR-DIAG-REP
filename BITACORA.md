@@ -1,5 +1,15 @@
 # Bitácora — SCR-DIAG-REP
 
+## 2026-10-05 — Correcciones de administración y verificación de credenciales
+
+- Creación individual y cambio de contraseña: formato `usuario:password`, doble entrada Samba, vigencia permanente, UID asignado por Linux y catálogo con datos reales.
+- Importación: errores propagados sin falso éxito, GID primario resuelto por nombre, cuentas de sistema y administrativas preservadas en Linux/membresías, registro de usuarios actualizado y respaldos privados conservados.
+- Bases Samba: copia con servicio detenido, comprobación del reinicio e intento de restauración del respaldo ante fallo. La sustitución de bases completas conserva su alcance explícito.
+- Equipos: edición de descripciones sin la expresión sed incorrecta, renombrado de vínculo Samba por SID y cascada de referencias; eliminación condicionada a ausencia de miembros y éxito de Linux/Samba.
+- Nuevo verificador de contraseñas CSV mediante comparación local de hashes NT; informa resultados sin exponer contraseñas o hashes. No modifica cuentas ni prueba permisos de carpetas.
+- CSV Bitwarden preparado fuera del repositorio con las 21 credenciales originales; comprobada la conservación exacta de usuarios y contraseñas. No se han comprobado remotamente contra el NAS.
+- Pruebas de regresión con comandos simulados y comprobación criptográfica de un vector NT conocido con OpenSSL real y entrada UTF-16LE preparada.
+
 ## 2026-10-05 — Catálogo y documentación de grupos
 
 Se actualizó `wiki/INICIO.md` para documentar el menú real `src/menu.sh`, la distinción entre grupos de sistema y de trabajo, los registros Linux/Samba y las descripciones actuales. Se retiraron de la guía afirmaciones antiguas de GID fijos, membresía automática por dominio, rutas `/tmp/export_*` y rollback automático que no corresponden al flujo vigente.
