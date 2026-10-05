@@ -7,17 +7,24 @@ if [[ "$(type -t log)" != "function" ]]; then
 fi
 
 seleccionar_export() {
-  echo ""
-  echo "📂 Carpetas: $EXPORT_PATH"
-  local exports=($(ls -d "$EXPORT_PATH"/export_* 2>/dev/null | sort -r))
-  [[ ${#exports[@]} -eq 0 ]] && error "No hay exports"
+  echo "" >&2
+  echo "📂 Carpetas: $EXPORT_PATH" >&2
+  local exports=() path num i
+  while IFS= read -r path; do
+    [[ -d "$path" ]] && exports+=("$path")
+  done < <(compgen -G "$EXPORT_PATH/export_*" | sort -r)
+  [[ ${#exports[@]} -eq 0 ]] && { error "No hay exports"; return 1; }
   
   for i in "${!exports[@]}"; do
     local folder=$(basename "${exports[$i]}")
-    echo "  $((i+1))) $folder"
+    echo "  $((i+1))) $folder" >&2
   done
-  read -r -p "Elige [1-${#exports[@]}]: " num
-  [[ ! "$num" =~ ^[0-9]+$ ]] || (( num < 1 || num > ${#exports[@]} )) && error "Inválido"
+  read -r -p "Elige [1-${#exports[@]}]: " num || return 1
+  if [[ ! "$num" =~ ^[0-9]+$ ]] || (( 10#$num < 1 || 10#$num > ${#exports[@]} )); then
+    error "Inválido"
+    return 1
+  fi
+  num=$((10#$num))
   echo "${exports[$((num-1))]}"
 }
 
@@ -149,16 +156,19 @@ opcion_secrets_tdb() {
 importar_run() {
   require_root
   
-  local export_dir=$(seleccionar_export)
+  local export_dir seleccion
+  export_dir=$(seleccionar_export) || return 1
   [[ -z "$export_dir" ]] && return 1
   
   mkdir -p /tmp/backup_$$
   analizar_migracion "$export_dir"
   
-  local seleccion=$(menu_seleccionar_importacion)
+  seleccion=$(menu_seleccionar_importacion) || return 1
   [[ -z "$seleccion" ]] && return 1
   
   confirm "¿Aplicar?" || return 0
+
+  [[ "$seleccion" =~ fstab ]] && comparar_fstab "$export_dir/fstab.txt"
   
   [[ "$seleccion" =~ grupos ]] && importar_grupos_linux "$export_dir"
   [[ "$seleccion" =~ usuarios ]] && importar_usuarios_linux "$export_dir"

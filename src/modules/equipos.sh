@@ -50,9 +50,7 @@ equipo_editar() {
   local db="${DATA_DIR}/equipos.db"
   local grupo old_grupo display gid desc created
 
-  equipo_listar
-  read -r -p "Seleccione grupo a editar: " grupo
-  [[ -z "$grupo" ]] && return 1
+  grupo=$(seleccionar_registro "$db" 'Equipo a editar') || return 1
 
   grep -q "^${grupo}|" "$db" || { error "Grupo no existe: $grupo"; return 1; }
 
@@ -95,9 +93,7 @@ equipo_eliminar() {
   local db="${DATA_DIR}/equipos.db"
   local grupo
 
-  equipo_listar
-  read -r -p "Seleccione grupo a eliminar: " grupo
-  [[ -z "$grupo" ]] && return 1
+  grupo=$(seleccionar_registro "$db" 'Equipo a eliminar') || return 1
 
   grep -q "^${grupo}|" "$db" || { error "Grupo no existe"; return 1; }
 
@@ -121,11 +117,18 @@ equipo_ver_integrantes() {
   local usuarios_db="${DATA_DIR}/usuarios.db"
 
   if [[ -z "$grupo" ]]; then
-    equipo_listar
-    read -r -p "Seleccione grupo: " grupo
+    grupo=$(seleccionar_registro "$db" 'Ver integrantes de equipos' todos) || return 1
   fi
 
   [[ -z "$grupo" ]] && return 1
+  if [[ "$grupo" == __TODOS__ ]]; then
+    local equipo display resto
+    while IFS='|' read -r equipo display resto; do
+      [[ -z "$equipo" || "$equipo" == \#* ]] && continue
+      equipo_ver_integrantes "$equipo"
+    done < "$db"
+    return 0
+  fi
   grep -q "^${grupo}|" "$db" || { error "Grupo no existe"; return 1; }
 
   echo ""
@@ -133,14 +136,17 @@ equipo_ver_integrantes() {
   echo "Usuario             | Nombre                          | Grupo Primario"
   echo "--------------------|----------------------------------|---------------"
 
+  local user full_name prim_grupo extra_groups uid created extra encontrados=0
   while IFS='|' read -r user full_name prim_grupo extra_groups uid created extra; do
     [[ -z "$user" || "$user" =~ ^# ]] && continue
 
     # Listar este usuario si está en el grupo (primario o adicional)
-    if [[ "$prim_grupo" == "$grupo" ]] || [[ "$extra_groups" =~ (^|,)${grupo}(,|$) ]]; then
+    if [[ "$prim_grupo" == "$grupo" ]] || [[ ",$extra_groups," == *",$grupo,"* ]]; then
       printf "%-19s | %-32s | %s\n" "$user" "$full_name" "$prim_grupo"
+      encontrados=$((encontrados+1))
     fi
   done < "$usuarios_db"
+  ((encontrados)) || echo '  Sin integrantes registrados.'
   echo ""
 }
 

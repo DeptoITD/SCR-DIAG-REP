@@ -107,7 +107,7 @@ mostrar_instrucciones_transfer() {
   echo "3️⃣  En el OTRO equipo, ejecuta:"
   echo ""
   echo "   cd /opt/scripts/SCR-DIAG-REP"
-  echo "   bash menu.sh"
+  echo "   sudo bash src/menu.sh"
   echo "   → Opción 3: Importar / replicar configuración"
   echo "   → Selecciona esta carpeta: $export_name"
   echo ""
@@ -118,6 +118,53 @@ mostrar_instrucciones_transfer() {
 # ============================================================================
 # FUNCIONES PARA IMPORTACIÓN INTELIGENTE
 # ============================================================================
+
+# stdout contiene solo la selección; los menús se muestran por stderr.
+seleccionar_registro() {
+  local archivo="$1" titulo="$2" modo="${3:-uno}"
+  local clave nombre resto entrada numero resultado="" item
+  local claves=() numeros=()
+  [[ -f "$archivo" ]] || { echo "[!] No existe: $archivo" >&2; return 1; }
+  echo "=== $titulo ===" >&2
+  while IFS='|' read -r clave nombre resto; do
+    [[ -z "$clave" || "$clave" == \#* ]] && continue
+    claves+=("$clave")
+    printf '%s) %s — %s\n' "${#claves[@]}" "$clave" "$nombre" >&2
+  done < "$archivo"
+  ((${#claves[@]})) || { echo "[!] No hay registros disponibles" >&2; return 1; }
+  [[ "$modo" == todos || "$modo" == varios ]] && echo 'T) Todos' >&2
+  [[ "$modo" == varios ]] && echo 'N) Ninguno' >&2
+  echo '0) Volver' >&2
+  while true; do
+    if [[ "$modo" == varios ]]; then
+      read -r -p 'Seleccione números separados por coma, T o N: ' entrada || return 1
+    else
+      read -r -p 'Seleccione una opción: ' entrada || return 1
+    fi
+    [[ "$entrada" == 0 ]] && return 1
+    if [[ "${entrada^^}" == T && "$modo" == todos ]]; then
+      echo '__TODOS__'; return 0
+    elif [[ "${entrada^^}" == T && "$modo" == varios ]]; then
+      (IFS=,; echo "${claves[*]}"); return 0
+    elif [[ "${entrada^^}" == N && "$modo" == varios ]]; then
+      echo ''; return 0
+    fi
+    if [[ "$entrada" =~ ^[0-9]+(,[0-9]+)*$ && ( "$modo" == varios || "$entrada" != *,* ) ]]; then
+      IFS=, read -ra numeros <<< "$entrada"
+      resultado=""
+      for numero in "${numeros[@]}"; do
+        # Limitar longitud antes de evaluar números ingresados.
+        [[ ${#numero} -le 9 ]] || { resultado=""; break; }
+        numero=$((10#$numero))
+        ((numero >= 1 && numero <= ${#claves[@]})) || { resultado=""; break; }
+        item="${claves[$((numero-1))]}"
+        [[ ",$resultado," == *",$item,"* ]] || resultado="${resultado:+$resultado,}$item"
+      done
+      [[ -n "$resultado" ]] && { echo "$resultado"; return 0; }
+    fi
+    echo '[!] Opción inválida. Elija una de las opciones mostradas.' >&2
+  done
+}
 
 validar_ruta() {
   local ruta="$1"
@@ -189,19 +236,22 @@ comparar_fstab() {
 }
 
 menu_seleccionar_importacion() {
+  local opt
+  {
   echo ""
   echo "═══════════════════════════════════════════════════════"
   echo "  ¿QUÉ DESEAS IMPORTAR?"
   echo "═══════════════════════════════════════════════════════"
   echo ""
-  echo "1) Solo USUARIOS (crear nuevos, dejar existentes)"
-  echo "2) USUARIOS + GRUPOS (crear/actualizar)"
+  echo "1) Solo USUARIOS (crear nuevos, sincronizar UID de existentes)"
+  echo "2) USUARIOS + GRUPOS (crear grupos faltantes)"
   echo "3) USUARIOS + GRUPOS + MEMBRESÍAS"
-  echo "4) TODO ANTERIOR + CONFIG SAMBA"
+  echo "4) TODO ANTERIOR + CREDENCIALES SAMBA (passdb.tdb)"
   echo "5) TODO (incluyendo fstab como referencia)"
   echo "6) PERSONALIZADO (elige qué elemento)"
   echo ""
-  read -r -p "Selecciona [1-6]: " opt
+  } >&2
+  read -r -p "Selecciona [1-6]: " opt || return 1
 
   case "$opt" in
     1) echo "usuarios" ;;
@@ -216,13 +266,13 @@ menu_seleccionar_importacion() {
 
 menu_personalizado() {
   local seleccion=""
-  echo ""
-  echo "Marca qué importar (SÍ/NO):"
+  echo "" >&2
+  echo "Marca qué importar (SÍ/NO):" >&2
 
   confirm "¿Importar USUARIOS?" && seleccion="${seleccion}usuarios,"
   confirm "¿Importar GRUPOS?" && seleccion="${seleccion}grupos,"
   confirm "¿Importar MEMBRESÍAS de grupos?" && seleccion="${seleccion}membresias,"
-  confirm "¿Importar CONFIG SAMBA?" && seleccion="${seleccion}samba,"
+  confirm "¿Importar CREDENCIALES SAMBA (passdb.tdb)?" && seleccion="${seleccion}samba,"
   confirm "¿Mostrar FSTAB como referencia?" && seleccion="${seleccion}fstab,"
 
   echo "${seleccion%,}"
@@ -233,12 +283,25 @@ menu_personalizado() {
 # ============================================================================
 
 detectar_samba_sid() {
-  local source="${1:-}"
+  local source="${1:-}" output sid
   if [[ -n "$source" ]]; then
-    grep "samba_sid=" "$source" 2>/dev/null | cut -d= -f2
+    output=$(sed -n 's/^samba_sid=//p' "$source" 2>/dev/null)
   else
-    pdbedit -P -v 2>/dev/null | grep "Machine SID" | awk '{print $NF}'
+    if ! command -v net >/dev/null 2>&1; then
+      echo "[AVISO] No se puede leer el SID local: falta el comando net de Samba." >&2
+      return 1
+    fi
+    output=$(net getlocalsid 2>/dev/null) || {
+      echo "[AVISO] net getlocalsid no pudo consultar el SID local de Samba." >&2
+      return 1
+    }
   fi
+  sid=$(printf '%s\n' "$output" | grep -oE 'S-1-5-21(-[0-9]+){3}' | head -n 1)
+  [[ -n "$sid" ]] || {
+    [[ -n "$source" ]] && echo "[AVISO] El manifiesto no contiene un samba_sid válido: $source. Genera una nueva exportación en el origen." >&2
+    return 1
+  }
+  printf '%s\n' "$sid"
 }
 
 verificar_conflictos_uid_gid() {

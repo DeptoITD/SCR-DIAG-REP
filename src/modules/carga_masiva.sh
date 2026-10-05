@@ -1,307 +1,163 @@
 #!/bin/bash
-# carga_masiva.sh — Carga masiva de usuarios desde archivo
-# Lee CSV/JSON, valida contra identidades.ini, genera outputs para servidor/NAS
-# Integrado a menu.sh → menu_usuarios → opción nueva
-
-if [[ "$(type -t log)" != "function" ]]; then
-  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || source "$(dirname "$0")/../config/servers.env"
-  source "${REPO_PATH:-$(dirname "$0")/..}/src/utils.sh" 2>/dev/null || source "$(dirname "$0")/../utils.sh"
+# Importa cuentas nuevas; nunca imprime ni guarda contraseñas en auditorías.
+if [[ "$(type -t log)" != function ]]; then
+  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || return 1
+  source "${REPO_PATH}/src/utils.sh"
 fi
-
-# ============================================================================
-# Helpers CSV → JSON
-# ============================================================================
-
-trim() {
-  local var="$*"
-  var="${var#"${var%%[![:space:]]*}"}"
-  var="${var%"${var##*[![:space:]]}"}"
-  printf '%s' "$var"
-}
-
-# Parsea CSV minimalista: campo1|campo2|campo3
-# Ignora líneas vacías y comentarios (#)
-parse_csv_line() {
-  local line="$1"
-  [[ -z "$line" || "$line" =~ ^# ]] && return 1
-  echo "$line"
-}
-
-# ============================================================================
-# Validación
-# ============================================================================
-
-validar_usuario() {
-  local user="$1"
-  [[ -z "$user" ]] && { echo "Usuario vacío"; return 1; }
-  [[ ! "$user" =~ ^[a-z0-9._-]+$ ]] && { echo "Usuario inválido (caracteres): $user"; return 1; }
-  return 0
-}
-
-validar_grupo() {
-  local grupo="$1" equipos_db="${2:-${DATA_DIR}/equipos.db}"
-  [[ -z "$grupo" ]] && { echo "Grupo vacío"; return 1; }
-  # Buscar en equipos.db (líneas que no sean comentario ni vacías)
-  grep -v '^#' "$equipos_db" | grep -v '^$' | cut -d'|' -f1 | grep -q "^${grupo}$" && return 0
-  echo "Grupo no existe en equipos.db: $grupo"
-  return 1
-}
-
-validar_dominio() {
-  local dominio="$1"
-  [[ -z "$dominio" ]] && { echo "Dominio vacío"; return 1; }
-  # Dominios válidos por ahora: PROYECTOS, ADM, COM (expandible)
-  case "$dominio" in
-    PROYECTOS|ADM|COM) return 0 ;;
-    *) echo "Dominio desconocido: $dominio (válidos: PROYECTOS, ADM, COM)"; return 1 ;;
-  esac
-}
-
-# ============================================================================
-# Lectura de archivo
-# ============================================================================
-
 leer_csv() {
-  local archivo="$1"
-  [[ ! -f "$archivo" ]] && { error "Archivo no encontrado: $archivo"; return 1; }
-
-  echo ""
-  echo "=== Lectura de archivo: $archivo ==="
-  echo ""
-
-  local linea_num=0
-  local usuarios_leidos=0
-  declare -a usuarios=()
-  declare -a errores=()
-
-  while IFS= read -r linea; do
-    ((linea_num++))
-
-    # Saltar vacías y comentarios
-    linea=$(trim "$linea")
-    [[ -z "$linea" || "$linea" =~ ^# ]] && continue
-
-    # Parse CSV: usuario|nombre|grupo|dominio (campos mínimos)
-    IFS='|' read -r usuario nombre grupo dominio <<< "$linea"
-
-    usuario=$(trim "$usuario")
-    nombre=$(trim "$nombre")
-    grupo=$(trim "$grupo")
-    dominio=$(trim "$dominio")
-
-    # Validación
-    validar_usuario "$usuario" || { errores+=("Línea $linea_num: usuario $usuario — $(validar_usuario "$usuario")"); continue; }
-    validar_grupo "$grupo" || { errores+=("Línea $linea_num: grupo $grupo — $(validar_grupo "$grupo")"); continue; }
-    validar_dominio "$dominio" || { errores+=("Línea $linea_num: dominio $dominio — $(validar_dominio "$dominio")"); continue; }
-
-    # Usuario ya existe en Linux?
-    if id "$usuario" &>/dev/null; then
-      warn "Línea $linea_num: $usuario ya existe en Linux. Se saltará en aplicación."
+  local archivo="$1" linea numero=0 usuario nombre grupo dominio uid password mensaje separadores
+  local -A vistos=()
+  USUARIOS_LEIDOS=(); ERRORES_LEIDOS=()
+  [[ -f "$archivo" ]] || { echo '[!] Archivo no encontrado.' >&2; return 1; }
+  while IFS= read -r linea || [[ -n "$linea" ]]; do
+    numero=$((numero+1))
+    linea="${linea%$'\r'}"
+    [[ $numero == 1 ]] && linea="${linea#$'\xef\xbb\xbf'}"
+    [[ -z "$linea" || "$linea" == \#* ]] && continue
+    [[ "$linea" == 'usuario|nombre|grupo|dominio|uid|password' ]] && continue
+    separadores="${linea//[^|]/}"
+    if [[ ${#separadores} != 5 ]]; then
+      ERRORES_LEIDOS+=("Línea $numero: se requieren seis columnas separadas por |."); continue
     fi
-
-    usuarios+=("$usuario|$nombre|$grupo|$dominio")
-    ((usuarios_leidos++))
+    IFS='|' read -r usuario nombre grupo dominio uid password <<< "$linea"
+    mensaje=""
+    if [[ ! "$usuario" =~ ^[a-z_][a-z0-9._-]*$ ]]; then
+      mensaje='Nombre de usuario inválido.'
+    elif [[ -n "${vistos[$usuario]:-}" ]]; then
+      mensaje='Usuario duplicado en el archivo.'
+    elif [[ -z "$nombre" || "$nombre" == *:* ]]; then
+      mensaje='Nombre completo vacío o con dos puntos.'
+    elif [[ ! "$grupo" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]; then
+      mensaje='Grupo inválido.'
+    elif ! getent group "$grupo" >/dev/null 2>&1; then
+      mensaje="El grupo $grupo no existe en Linux; créalo antes de cargar."
+    elif [[ ! "$dominio" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]; then
+      mensaje='Dominio vacío o inválido.'
+    elif [[ -n "$uid" && ( ! "$uid" =~ ^[0-9]+$ || ${#uid} -gt 9 ) ]]; then
+      mensaje='UID inválido; déjalo vacío para asignación automática.'
+    elif [[ -z "$password" || "$password" == *:* ]]; then
+      mensaje='Contraseña vacía o con dos puntos; no se admite : ni |.'
+    elif [[ -n "$uid" ]] && ((10#$uid == 0)); then
+      mensaje='No se permite UID 0.'
+    elif ! id "$usuario" >/dev/null 2>&1 && [[ -n "$uid" ]] && getent passwd "$((10#$uid))" >/dev/null 2>&1; then
+      mensaje="UID $uid ocupado en el equipo destino."
+    fi
+    if [[ -n "$mensaje" ]]; then
+      ERRORES_LEIDOS+=("Línea $numero: $mensaje"); continue
+    fi
+    if [[ -n "$uid" ]]; then
+      uid=$((10#$uid))
+      if [[ -n "${vistos[uid_$uid]:-}" ]]; then
+        ERRORES_LEIDOS+=("Línea $numero: UID repetido en el archivo."); continue
+      fi
+      vistos[uid_$uid]=1
+    fi
+    vistos[$usuario]=1
+    USUARIOS_LEIDOS+=("$usuario|$nombre|$grupo|$dominio|$uid|$password")
   done < "$archivo"
-
-  # Resumen
-  if [[ ${#errores[@]} -gt 0 ]]; then
-    echo "[!] Errores encontrados:"
-    printf '  %s\n' "${errores[@]}"
-    echo ""
+  if ((${#ERRORES_LEIDOS[@]})); then
+    printf '[!] %s\n' "${ERRORES_LEIDOS[@]}" >&2
+    echo '[!] Corrige todas las filas antes de aplicar.' >&2
+    USUARIOS_LEIDOS=(); return 1
   fi
-
-  echo "[+] Usuarios leídos: $usuarios_leidos"
-  echo ""
-
-  if [[ $usuarios_leidos -eq 0 ]]; then
-    error "Ningún usuario válido en archivo"
-    return 1
-  fi
-
-  # Mostrar resumen
-  echo "Usuarios a procesar:"
-  printf "%-20s | %-30s | %-15s | %-12s\n" "Usuario" "Nombre" "Grupo" "Dominio"
-  printf "%-20s | %-30s | %-15s | %-12s\n" "$(printf '=%.0s' {1..19})" "$(printf '=%.0s' {1..29})" "$(printf '=%.0s' {1..14})" "$(printf '=%.0s' {1..11})"
-  for u in "${usuarios[@]}"; do
-    IFS='|' read -r user name grp dom <<< "$u"
-    printf "%-20s | %-30s | %-15s | %-12s\n" "$user" "$name" "$grp" "$dom"
+  ((${#USUARIOS_LEIDOS[@]})) || { echo '[!] No hay usuarios en el archivo.' >&2; return 1; }
+  echo 'Usuario | Nombre | Grupo | Dominio | UID | Acción'
+  for linea in "${USUARIOS_LEIDOS[@]}"; do
+    IFS='|' read -r usuario nombre grupo dominio uid password <<< "$linea"
+    mensaje=CREAR
+    id "$usuario" >/dev/null 2>&1 && mensaje='OMITIR (ya existe)'
+    printf '%s | %s | %s | %s | %s | %s\n' "$usuario" "$nombre" "$grupo" "$dominio" "${uid:-automático}" "$mensaje"
   done
-  echo ""
-
-  # Exportar array a variable global
-  USUARIOS_LEIDOS=("${usuarios[@]}")
-  ERRORES_LEIDOS=("${errores[@]}")
-  return 0
 }
 
-# ============================================================================
-# Generación JSON para servidor/NAS
-# ============================================================================
-
-generar_json_servidor() {
-  local archivo_out="$1"
-  shift
-  local usuarios=("$@")
-
-  cat > "$archivo_out" <<'EOF'
-{
-  "target": "servidor",
-  "usuarios": [
-EOF
-
-  local primero=1
-  for u in "${usuarios[@]}"; do
-    IFS='|' read -r usuario nombre grupo dominio <<< "$u"
-
-    [[ $primero -eq 0 ]] && echo "," >> "$archivo_out"
-    cat >> "$archivo_out" <<EOJSON
-    {
-      "usuario": "$usuario",
-      "nombre": "$nombre",
-      "grupo_primario": "$grupo",
-      "dominio": "$dominio"
-    }
-EOJSON
-    primero=0
+aplicar_carga_masiva() {
+  local linea usuario nombre grupo dominio uid password fecha comando estado
+  local creados=0 omitidos=0 fallidos=0
+  local -a opciones
+  require_root
+  for comando in useradd chpasswd chage smbpasswd pdbedit getent; do
+    command -v "$comando" >/dev/null 2>&1 || { echo "[!] Falta $comando." >&2; return 1; }
   done
-
-  cat >> "$archivo_out" <<'EOF'
-  ]
-}
-EOF
-
-  info "JSON servidor: $archivo_out"
-}
-
-generar_json_nas() {
-  local archivo_out="$1"
-  shift
-  local usuarios=("$@")
-
-  cat > "$archivo_out" <<'EOF'
-{
-  "target": "nas",
-  "usuarios": [
-EOF
-
-  local primero=1
-  for u in "${usuarios[@]}"; do
-    IFS='|' read -r usuario nombre grupo dominio <<< "$u"
-
-    [[ $primero -eq 0 ]] && echo "," >> "$archivo_out"
-    cat >> "$archivo_out" <<EOJSON
-    {
-      "usuario": "$usuario",
-      "nombre": "$nombre",
-      "grupo_primario": "$grupo",
-      "dominio": "$dominio"
-    }
-EOJSON
-    primero=0
+  mkdir -p "$DATA_DIR" "$EXPORT_PATH" || return 1
+  local auditoria="$EXPORT_PATH/usuarios_entrada.csv"
+  (umask 077; printf 'usuario|nombre|grupo|dominio|uid|estado\n' > "$auditoria") || return 1
+  chmod 600 "$auditoria" || return 1
+  fecha=$(date +%Y-%m-%d)
+  for linea in "${USUARIOS_LEIDOS[@]}"; do
+    IFS='|' read -r usuario nombre grupo dominio uid password <<< "$linea"
+    estado=OMITIDO
+    if id "$usuario" >/dev/null 2>&1; then
+      omitidos=$((omitidos+1))
+      echo "[OMITIDO] $usuario ya existe; conserva su contraseña."
+    else
+      opciones=(-m -g "$grupo" -c "$nombre")
+      [[ -n "$uid" ]] && opciones+=(-u "$uid")
+      if ! useradd "${opciones[@]}" "$usuario"; then
+        estado=ERROR_CREACION
+      elif ! printf '%s:%s\n' "$usuario" "$password" | chpasswd; then
+        estado=ERROR_PASSWORD_LINUX
+      elif ! chage -m 0 -M -1 -I -1 -E -1 -d "$fecha" "$usuario"; then
+        estado=ERROR_VIGENCIA
+      elif ! printf '%s\n%s\n' "$password" "$password" | smbpasswd -s -a "$usuario"; then
+        estado=ERROR_SAMBA
+      elif ! smbpasswd -e "$usuario"; then
+        estado=ERROR_SAMBA
+      elif ! pdbedit -u "$usuario" -c '[UX]' >/dev/null; then
+        estado=ERROR_VIGENCIA_SAMBA
+      else
+        uid=$(id -u "$usuario")
+        if printf '%s|%s|%s||%s|%s\n' "$usuario" "$nombre" "$grupo" "$uid" "$fecha" >> "$DATA_DIR/usuarios.db"; then
+          estado=CREADO; creados=$((creados+1))
+          echo "[CREADO] $usuario: contraseña permanente en Linux y Samba."
+        else estado=ERROR_REGISTRO; fi
+      fi
+      if [[ "$estado" == ERROR_* ]]; then
+        fallidos=$((fallidos+1))
+        echo "[!] $usuario: $estado. Puede haberse creado parcialmente; revisa la cuenta antes de reintentar." >&2
+      fi
+    fi
+    printf '%s|%s|%s|%s|%s|%s\n' "$usuario" "$nombre" "$grupo" "$dominio" "$uid" "$estado" >> "$auditoria" || return 1
   done
-
-  cat >> "$archivo_out" <<'EOF'
-  ]
+  USUARIOS_LEIDOS=()
+  echo "Resultado: $creados creados, $omitidos omitidos, $fallidos errores."
+  ((fallidos == 0))
 }
-EOF
-
-  info "JSON NAS: $archivo_out"
-}
-
-# ============================================================================
-# Workflow principal
-# ============================================================================
 
 carga_masiva_workflow() {
-  local archivo csv_out json_servidor json_nas
-
-  echo ""
-  echo "=== Carga Masiva de Usuarios ==="
-  echo ""
-  echo "Formato entrada: CSV con columnas:"
-  echo "  usuario|nombre|grupo|dominio"
-  echo ""
-  echo "Ejemplo:"
-  echo "  julian.ochoa|Julian Ochoa|IND_GEN|PROYECTOS"
-  echo "  maria.admin|Maria Admin|ADM_SYSADMIN|ADM"
-  echo ""
-
-  read -r -p "Ruta del archivo CSV: " archivo
-  [[ -z "$archivo" ]] && { error "Archivo requerido"; return 1; }
-
-  # Expandir ~
+  local archivo resultado
+  echo '=== Carga Masiva de Usuarios ==='
+  echo 'Formato: usuario|nombre|grupo|dominio|uid|password'
+  echo 'El UID puede quedar vacío. Las contraseñas se usan tal cual, sin vencimiento.'
+  echo 'Los grupos deben existir en Linux. El dominio se registra como referencia.'
+  echo 'Los usuarios existentes se omiten y conservan sus contraseñas.'
+  read -r -p 'Ruta del archivo CSV: ' archivo || return 1
   archivo="${archivo/#\~/$HOME}"
-
   leer_csv "$archivo" || return 1
-
-  # Confirmar
-  echo ""
-  confirm "¿Proceder con carga masiva de ${#USUARIOS_LEIDOS[@]} usuarios?" || { info "Cancelado"; return 0; }
-
-  # Generar JSON outputs
-  csv_out="${EXPORT_PATH}/usuarios_entrada.csv"
-  json_servidor="${EXPORT_PATH}/usuarios_servidor.json"
-  json_nas="${EXPORT_PATH}/usuarios_nas.json"
-
-  mkdir -p "$EXPORT_PATH"
-
-  # Guardar CSV procesado (auditoría)
-  {
-    echo "# Entrada procesada — $(date)"
-    echo "usuario|nombre|grupo|dominio"
-    printf '%s\n' "${USUARIOS_LEIDOS[@]}"
-  } > "$csv_out"
-  info "CSV procesado: $csv_out"
-
-  # Generar JSONs
-  generar_json_servidor "$json_servidor" "${USUARIOS_LEIDOS[@]}"
-  generar_json_nas "$json_nas" "${USUARIOS_LEIDOS[@]}"
-
-  # Instrucciones siguientes
-  echo ""
-  echo "╔════════════════════════════════════════════════════════╗"
-  echo "║  PRÓXIMO PASO: Aplicar en Servidor y/o NAS            ║"
-  echo "╚════════════════════════════════════════════════════════╝"
-  echo ""
-  echo "1. SERVIDOR (srv-2):"
-  echo "   Copiar: $json_servidor → /tmp/usuarios_servidor.json"
-  echo "   Ejecutar: sudo bash src/servidor/carga_masiva_aplicar.sh /tmp/usuarios_servidor.json --dry-run"
-  echo ""
-  echo "2. NAS:"
-  echo "   Copiar: $json_nas → /tmp/usuarios_nas.json"
-  echo "   Ejecutar: sudo bash src/nas/carga_masiva_aplicar.sh /tmp/usuarios_nas.json --dry-run"
-  echo ""
-  echo "Archivos generados en: $EXPORT_PATH"
-  echo ""
+  if confirm "¿Crear ${#USUARIOS_LEIDOS[@]} usuarios del archivo (omitiendo existentes)?"; then
+    aplicar_carga_masiva
+    resultado=$?
+    USUARIOS_LEIDOS=()
+    return "$resultado"
+  fi
+  USUARIOS_LEIDOS=()
+  echo 'Cancelado.'
 }
 
 menu_carga_masiva() {
+  local opt
   while true; do
-    echo ""
-    echo "=== Carga Masiva ==="
-    echo "1. Cargar usuarios desde archivo"
-    echo "2. Ver último CSV procesado"
-    echo "3. Volver"
-    read -r -p "Opción: " opt
-
+    echo '=== Carga Masiva ==='
+    echo '1. Cargar usuarios desde archivo'
+    echo '2. Ver último resultado (sin contraseñas)'
+    echo '3. Volver'
+    read -r -p 'Opción: ' opt || return 0
     case "$opt" in
       1) carga_masiva_workflow ;;
-      2)
-        local csv_out="${EXPORT_PATH}/usuarios_entrada.csv"
-        if [[ -f "$csv_out" ]]; then
-          head -20 "$csv_out"
-          echo ""
-          echo "(primeras 20 líneas)"
-        else
-          error "No hay CSV procesado"
-        fi
-        ;;
-      3) break ;;
-      *) error_soft "Opción inválida" ;;
+      2) if [[ -f "$EXPORT_PATH/usuarios_entrada.csv" ]]; then
+           cut -d'|' -f1-4 "$EXPORT_PATH/usuarios_entrada.csv" | head -20
+         else echo '[!] No hay cargas procesadas.' >&2; fi ;;
+      3) return 0 ;;
+      *) echo '[!] Opción inválida.' >&2 ;;
     esac
   done
-}
-
-error_soft() {
-  echo "[!] $1" >&2
 }

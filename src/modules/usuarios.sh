@@ -16,7 +16,7 @@ usuario_listar() {
   echo "Usuario             | Nombre                          | Grupo Primario | Grupos Extra"
   echo "--------------------|----------------------------------|----------------|------------------------------------------"
 
-  while IFS'|' read -r user full_name prim_grupo extra_groups uid created extra; do
+  while IFS='|' read -r user full_name prim_grupo extra_groups uid created extra; do
     [[ -z "$user" || "$user" =~ ^# ]] && continue
     printf "%-19s | %-32s | %-14s | %s\n" "$user" "$full_name" "$prim_grupo" "${extra_groups:--(ninguno)}"
   done < "$db"
@@ -36,12 +36,12 @@ usuario_crear() {
   id "$user" &>/dev/null && { error "Usuario ya existe"; return 1; }
 
   read -r -p "Nombre completo: " full_name
-  read -r -p "Grupo primario (ej: IND_ARQ): " prim_grupo
+  prim_grupo=$(seleccionar_registro "$equipos_db" 'Grupo primario') || return 1
 
   # Validar grupo
   grep -q "^${prim_grupo}|" "$equipos_db" || { error "Grupo no existe: $prim_grupo"; return 1; }
 
-  read -r -p "Grupos adicionales (separados por coma, opcional): " extra_groups
+  extra_groups=$(seleccionar_registro "$equipos_db" 'Grupos adicionales' varios) || return 1
 
   # Obtener próximo UID
   uid=$(($(awk -F'|' 'NR>1 {print $5}' "$usuarios_db" | sort -n | tail -1) + 1))
@@ -86,9 +86,7 @@ usuario_editar() {
   local db="${DATA_DIR}/usuarios.db"
   local user line full_name prim_grupo extra_groups opt
 
-  usuario_listar
-  read -r -p "Seleccione usuario a editar: " user
-  [[ -z "$user" ]] && return 1
+  user=$(seleccionar_registro "$db" 'Usuario a editar') || return 1
 
   line=$(grep "^${user}|" "$db") || { error "Usuario no existe"; return 1; }
 
@@ -112,7 +110,7 @@ usuario_editar() {
       ;;
     3)  # Grupo primario
       local new_grupo
-      read -r -p "Nuevo grupo primario: " new_grupo
+      new_grupo=$(seleccionar_registro "${DATA_DIR}/equipos.db" 'Nuevo grupo primario') || return 1
       grep -q "^${new_grupo}|" "${DATA_DIR}/equipos.db" || { error "Grupo no existe"; return 1; }
       sudo usermod -g "$new_grupo" "$user"
       sed -i "s/^${user}|\([^|]*\)|\([^|]*\)|/${user}|\1|${new_grupo}|/" "$db"
@@ -120,7 +118,7 @@ usuario_editar() {
       ;;
     4)  # Grupos adicionales
       local new_extra
-      read -r -p "Nuevos grupos adicionales (separados por coma): " new_extra
+      new_extra=$(seleccionar_registro "${DATA_DIR}/equipos.db" 'Nuevos grupos adicionales' varios) || return 1
 
       # Remover de viejos, agregar a nuevos
       local old_extra=$(echo "$line" | cut -d'|' -f4)
@@ -151,9 +149,7 @@ usuario_eliminar() {
   local db="${DATA_DIR}/usuarios.db"
   local user line
 
-  usuario_listar
-  read -r -p "Seleccione usuario a eliminar: " user
-  [[ -z "$user" ]] && return 1
+  user=$(seleccionar_registro "$db" 'Usuario a eliminar') || return 1
 
   line=$(grep "^${user}|" "$db") || { error "Usuario no existe"; return 1; }
 

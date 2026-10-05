@@ -26,7 +26,7 @@ exportar_run() {
     echo "export_type=complete"
 
     # Detectar SID Samba
-    local samba_sid=$(pdbedit -P -v 2>/dev/null | grep "Machine SID" | awk '{print $NF}')
+    local samba_sid=$(detectar_samba_sid)
     [[ -n "$samba_sid" ]] && echo "samba_sid=${samba_sid}"
 
     # Versión Samba
