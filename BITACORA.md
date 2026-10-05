@@ -1,5 +1,9 @@
 # Bitácora — SCR-DIAG-REP
 
+## 2026-10-05 — Verificador como descarga independiente
+
+Por solicitud del usuario, se retiraron del repositorio `src/verificar_credenciales_csv.sh` y su prueba dedicada. Se conserva la utilidad como archivo descargable para ejecutar desde `/home/soporte/Downloads/` del NAS. Las correcciones de administración permanecen en el repositorio. Se actualizaron los comandos de la wiki y de la guía de carga.
+
 ## 2026-10-05 — Correcciones de administración y verificación de credenciales
 
 - Creación individual y cambio de contraseña: formato `usuario:password`, doble entrada Samba, vigencia permanente, UID asignado por Linux y catálogo con datos reales.

@@ -34,10 +34,12 @@ En este servidor de Samba local, el grupo Linux sigue siendo necesario para perm
 
 ## Comprobar contraseñas guardadas en Samba
 
+El verificador es una utilidad descargable independiente, fuera del repositorio. Copiar `verificar_credenciales_csv.sh` a `/home/soporte/Downloads/` del NAS antes de ejecutar el comando siguiente.
+
 En el NAS, ejecutar:
 
 ```bash
-sudo bash src/verificar_credenciales_csv.sh /home/soporte/Downloads/usuarios_contrasenas_permanentes.csv
+sudo bash /home/soporte/Downloads/verificar_credenciales_csv.sh /home/soporte/Downloads/usuarios_contrasenas_permanentes.csv
 ```
 
 La comprobación compara el hash NT calculado a partir de cada contraseña del CSV con el hash local de Samba. No cambia cuentas, no intenta autenticaciones y no imprime contraseñas ni hashes. Requiere `pdbedit`, `iconv` y OpenSSL con MD4 (proveedor legacy en OpenSSL 3). Informa coincidencias, diferencias, cuentas ausentes y cuentas bloqueadas/deshabilitadas. Su éxito comprueba las contraseñas almacenadas; no comprueba red ni permisos de carpetas.

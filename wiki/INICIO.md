@@ -117,8 +117,10 @@ Las importaciones conservan los respaldos en `logs/importacion.*` y se detienen 
 
 ## Comprobar las credenciales del CSV y Bitwarden
 
+Descargar la utilidad independiente `verificar_credenciales_csv.sh` y copiarla a `/home/soporte/Downloads/` del NAS. No se instala mediante `git pull`.
+
 ```bash
-sudo bash src/verificar_credenciales_csv.sh /home/soporte/Downloads/usuarios_contrasenas_permanentes.csv
+sudo bash /home/soporte/Downloads/verificar_credenciales_csv.sh /home/soporte/Downloads/usuarios_contrasenas_permanentes.csv
 ```
 
 El resultado `[COINCIDE]` confirma que la contraseña del CSV coincide con la guardada en Samba y que no hay indicadores de bloqueo/deshabilitación. No muestra secretos ni modifica cuentas. No sustituye una prueba de permisos de carpetas. Ver [comprobación y formato Bitwarden](../docs/CARGA_MASIVA.md).
