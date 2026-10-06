@@ -84,7 +84,7 @@ usuario|nombre|grupo|dominio|uid|password
 
 Ejecuta `sudo bash src/script.sh carga-masiva /ruta/usuarios.csv`. El UID puede quedar vacío para asignación automática. La contraseña se usa exactamente como aparece, sin vencimiento y sin cambio obligatorio al primer ingreso en la carga masiva. El dominio del CSV es una referencia de auditoría; no agrega automáticamente una membresía ni configura un dominio Samba.
 
-La carga crea grupos de trabajo faltantes en Linux, registra el vínculo Samba y guarda el catálogo. Las cuentas nuevas se crean con `-M -d /nonexistent -s /usr/sbin/nologin`; tienen identidad Linux para permisos, sin home nuevo ni consola. Los usuarios existentes se omiten sin cambiar contraseñas ni su shell. Las excepciones administrativas `soporte`, `sara.albarracin` y `juan.rojas` existentes no se convierten por esta carga.
+La carga crea grupos de trabajo faltantes en Linux, registra el vínculo Samba y guarda el catálogo. Las cuentas nuevas se crean con `-M -d /nonexistent -s /usr/sbin/nologin`; tienen identidad Linux para permisos, sin home nuevo ni consola. Las cuentas existentes reciben la contraseña del CSV y se verifican; home y shell existentes se conservan. `soporte` se excluye de la carga y migración Samba.
 
 No hay opción de recuperación ni script de conversión: fueron retirados tras la corrección. Las carpetas antiguas no se borran automáticamente.
 
@@ -92,15 +92,17 @@ Ver [detalle de carga masiva](../CARGA_MASIVA.md). El CSV de entrada contiene co
 
 ## Exportación e importación
 
-Origen: menú 2. Copia la carpeta `src/export/export_HOST_FECHA/` al mismo directorio de exportaciones del destino. Destino: menú 3 y selección numerada de carpeta y componentes.
+Ejecuta `sudo bash src/script.sh exportar`, transfiere la carpeta completa mediante RustDesk o USB y ejecuta `sudo bash src/script.sh importar /ruta/carpeta` en el destino.
 
-`manifest.txt` contiene metadatos y SID; no es un CSV de usuarios. El SID local se consulta con `net getlocalsid`. Una exportación antigua puede carecer de SID y necesitar generarse de nuevo.
+El paquete v1.0 incluye `credenciales_samba.txt` con hashes, identidades Linux, grupos y membresías. Se valida antes de crear el manifiesto de exportación completa. Una cuenta de trabajo Linux sin credencial Samba impide dar la exportación por válida. El archivo de credenciales no debe publicarse ni pegarse en conversaciones.
 
-Al importar grupos, se utiliza el GID real del destino para el catálogo y se registran en Samba los grupos de trabajo admitidos. Los grupos Linux generales que incluya la exportación no se convierten automáticamente en grupos de trabajo Samba. Los usuarios nuevos importados se crean sin home ni shell interactiva. La referencia fstab no modifica automáticamente `/etc/fstab`.
+La importación valida todos los archivos antes de confirmar, incorpora grupos y cuentas faltantes, sincroniza el nombre y grupo primario de las existentes y agrega membresías. Resuelve grupos por nombre y GID del destino; un conflicto UID requiere resolución previa. Las cuentas nuevas no generan home ni consola; las existentes conservan home y shell.
 
-Antes de aplicar se muestran análisis y confirmación. El flujo vigente no ofrece un rollback automático al final; revisar los errores reportados y los respaldos disponibles. Importar `passdb.tdb` afecta la base de credenciales Samba del destino, y `secrets.tdb` puede cambiar su identidad: revisar cuidadosamente esas opciones.
+Las contraseñas compartidas se toman del origen. Las cuentas exclusivas del destino se conservan. `soporte` se excluye de Samba, aunque su administración Linux permanece. Cada credencial se verifica por hash y estado habilitado; no se muestra el hash. Se establece contraseña Samba sin vencimiento.
 
-Las importaciones conservan los respaldos en `logs/importacion.*` y se detienen al fallar un componente. Las cuentas administrativas `soporte`, `sara.albarracin` y `juan.rojas` se omiten en la importación Linux y de membresías. Restaurar una base Samba completa sigue sustituyendo sus credenciales: esa operación no garantiza conservar las contraseñas del destino.
+No se copia `passdb.tdb` sobre la base del destino ni se importa `secrets.tdb`: se conserva su SID. No se modifica fstab ni la configuración de recursos compartidos. Las exportaciones v0.5 sin credenciales deben regenerarse.
+
+Los respaldos quedan en `logs/importacion.*`. Una falla detiene el flujo y no anuncia éxito; puede haber cambios parciales y se conserva el respaldo para revisarlos. Las ACL deben comprobarse en el almacenamiento por separado.
 
 ## Comprobar las credenciales del CSV y Bitwarden
 

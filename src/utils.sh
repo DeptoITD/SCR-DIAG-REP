@@ -87,25 +87,7 @@ mostrar_instrucciones_transfer() {
   echo "SIGUIENTE: Copiar archivos a otro equipo"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
-  echo "1️⃣  OPCIÓN A: SCP (si tienes acceso SSH a otro equipo)"
-  echo "   Desde ESTE equipo, copia a otro:"
-  echo ""
-  echo "   scp -r '$export_dir' usuario@IP_OTRO_EQUIPO:/opt/scripts/SCR-DIAG-REP/src/export/"
-  echo ""
-  echo "   Ejemplo:"
-  echo "   scp -r '$export_dir' soporte@192.168.1.50:/opt/scripts/SCR-DIAG-REP/src/export/"
-  echo ""
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo ""
-  echo "2️⃣  OPCIÓN B: Copia manual (USB, red compartida, etc.)"
-  echo "   Copia la carpeta:"
-  echo "   $export_dir"
-  echo ""
-  echo "   Pega en el otro equipo en:"
-  echo "   /opt/scripts/SCR-DIAG-REP/src/export/"
-  echo ""
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo ""
+  echo "Copia la carpeta completa mediante RustDesk o USB al equipo destino."
   echo "3️⃣  En el OTRO equipo, ejecuta:"
   echo ""
   echo "   cd /opt/scripts/SCR-DIAG-REP"
@@ -159,7 +141,10 @@ establecer_password_permanente() {
   chage -m 0 -M -1 -I -1 -E -1 -d "$(date +%Y-%m-%d)" "$user" || return 1
   printf '%s\n%s\n' "$pass" "$pass" | smbpasswd -s -a "$user" || return 1
   smbpasswd -e "$user" || return 1
-  pdbedit -u "$user" -c '[X]' >/dev/null
+  pdbedit -u "$user" -c '[X]' >/dev/null || return 1
+  local esperado
+  esperado=$(hash_password_nt "$pass") || return 1
+  verificar_hash_samba "$user" "$esperado"
 }
 
 es_grupo_trabajo() {
@@ -462,4 +447,32 @@ advertencia_secrets_tdb() {
   echo "✅ RECOMENDADO: Restaurar solo hashes (passdb.tdb)"
   echo "🔴 RIESGO: Importar secrets.tdb solo si SEGURO qué haces"
   echo ""
+}
+
+validar_credenciales_samba() {
+  [[ -f "$1" ]] || { echo '[!] Faltan credenciales Samba; regenera la exportación.' >&2; return 1; }
+  awk -F: '
+    NF!=7 || $1 !~ /^[a-z_][a-z0-9._-]*$/ || $2 !~ /^[0-9]+$/ ||
+    length($4)!=32 || $4 !~ /^[[:xdigit:]]+$/ || vistos[$1]++ {
+      print "[!] Registro Samba inválido en línea " NR > "/dev/stderr"; error=1
+    }
+    END {exit error}
+  ' "$1"
+}
+
+verificar_hash_samba() {
+  local usuario="$1" esperado="$2" registro actual flags
+  registro=$(pdbedit -L -w -u "$usuario" 2>/dev/null) || return 1
+  registro=$(printf '%s\n' "$registro" | awk -F: -v u="$usuario" '$1==u {print;exit}')
+  IFS=: read -r _ _ _ actual flags _ <<< "$registro"
+  [[ -n "$registro" && "${actual^^}" == "${esperado^^}" && "$flags" != *D* && "$flags" != *L* ]]
+}
+
+hash_password_nt() {
+  local resultado
+  resultado=$(printf '%s' "$1" | iconv -f UTF-8 -t UTF-16LE | openssl dgst -md4 -provider legacy 2>/dev/null) ||
+    resultado=$(printf '%s' "$1" | iconv -f UTF-8 -t UTF-16LE | openssl dgst -md4 2>/dev/null) || return 1
+  resultado="${resultado##* }"
+  [[ "$resultado" =~ ^[[:xdigit:]]{32}$ ]] || return 1
+  printf '%s' "$resultado"
 }

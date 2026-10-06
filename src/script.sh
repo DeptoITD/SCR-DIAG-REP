@@ -8,8 +8,8 @@ Uso: sudo bash src/script.sh ACCION [RUTA]
 Flujo de migración: exportar en servidor → copiar carpeta → importar en NAS → verificar.
   diagnostico                 Diagnóstico del equipo
   exportar                    Generar carpeta exportada
-  importar [CARPETA]          Analizar y elegir componentes a importar
-  carga-masiva [CSV]          Validar y cargar cuentas nuevas
+  importar [CARPETA]          Validar e incorporar identidades y credenciales
+  carga-masiva [CSV]          Crear o sincronizar contraseñas desde CSV
   listar-usuarios             Consultar usuarios
   listar-grupos               Sincronizar y consultar grupos de trabajo
   usuarios                    Administrar usuarios

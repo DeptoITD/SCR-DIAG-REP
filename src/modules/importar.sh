@@ -52,7 +52,7 @@ importar_usuarios_linux() {
   [[ -f "$export_dir/grupos_linux.txt" ]] || { echo '[!] Faltan los grupos del origen.' >&2; return 1; }
   while IFS=: read -r user _ uid gid nombre home shell; do
     [[ "$uid" =~ ^[0-9]+$ ]] && ((uid >= 1000 && uid < 65534)) || continue
-    case "$user" in soporte|sara.albarracin|juan.rojas) echo "[CONSERVAR] $user"; continue ;; esac
+    case "$user" in soporte) echo "[CONSERVAR] $user"; continue ;; esac
     grupo=$(awk -F: -v gid="$gid" '$3 == gid {print $1; exit}' "$export_dir/grupos_linux.txt")
     [[ -n "$grupo" ]] || { echo "[!] Falta el grupo primario de $user." >&2; return 1; }
     registro=$(getent group "$grupo") || { echo "[!] Falta $grupo en el destino." >&2; return 1; }
@@ -60,6 +60,7 @@ importar_usuarios_linux() {
     if id "$user" >/dev/null 2>&1; then
       actual=$(id -u "$user") || return 1
       [[ "$actual" == "$uid" ]] || { echo "[!] $user tiene UID $actual; no se cambiará automáticamente a $uid." >&2; return 1; }
+      sudo usermod -g "$grupo" -c "$nombre" "$user" || return 1
       existentes=$((existentes+1))
     else
       sudo useradd -M -u "$uid" -g "$gid" -c "$nombre" -d /nonexistent -s /usr/sbin/nologin "$user" || return 1
@@ -78,7 +79,9 @@ importar_grupos_linux() {
     [[ "$gid" =~ ^[0-9]+$ ]] || return 1
     if ! es_grupo_trabajo "$grupo" && ((gid < 1000 || gid >= 65534)); then continue; fi
     if ! getent group "$grupo" >/dev/null; then
-      sudo groupadd -g "$gid" "$grupo" || return 1
+      if getent group "$gid" >/dev/null; then
+        sudo groupadd "$grupo" || return 1
+      else sudo groupadd -g "$gid" "$grupo" || return 1; fi
     fi
     if es_grupo_trabajo "$grupo"; then
       asegurar_grupo_samba "$grupo" || return 1
@@ -97,51 +100,73 @@ importar_membresias() {
     for u in "${users[@]}"; do
       u="${u#"${u%%[![:space:]]*}"}"; u="${u%"${u##*[![:space:]]}"}"
       [[ -n "$u" ]] || continue
-      case "$u" in soporte|sara.albarracin|juan.rojas) continue ;; esac
+      case "$u" in soporte) continue ;; esac
       sudo gpasswd -a "$u" "$grupo" || return 1
       registrar_usuario_catalogo "$u" || return 1
     done
   done < "$export_dir/membresias.txt"
 }
 
-restaurar_base_samba() {
-  local origen="$1" destino="$2" nombre
-  nombre=$(basename "$destino")
-  [[ -f "$destino" ]] || { echo "[!] No existe $destino; revisa la ruta Samba." >&2; return 1; }
-  sudo cp -p "$destino" "$BACKUP_IMPORTACION/$nombre.bak" || return 1
-  sudo systemctl stop smbd || return 1
-  if ! sudo cp "$origen" "$destino" || ! sudo chmod 600 "$destino" || ! sudo systemctl start smbd; then
-    echo "[!] Falló $nombre; restaurando el respaldo conservado." >&2
-    sudo cp -p "$BACKUP_IMPORTACION/$nombre.bak" "$destino" || return 1
-    sudo systemctl start smbd || return 1
-    return 1
-  fi
+validar_export_importacion() {
+  local dir="$1" usuario uid lm hash flags resto registro gid cred_uid
+  for registro in usuarios_linux.txt grupos_linux.txt membresias.txt credenciales_samba.txt; do
+    [[ -f "$dir/$registro" ]] || { echo "[!] Falta $registro; genera una exportación actual." >&2; return 1; }
+  done
+  awk -F: 'NF!=7 || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || vistos[$1]++ {error=1} END {exit error}' "$dir/usuarios_linux.txt" || { echo '[!] Identidades Linux inválidas.' >&2; return 1; }
+  validar_credenciales_samba "$dir/credenciales_samba.txt" || return 1
+  # Las exportaciones antiguas/incompletas no pueden importar identidades sin clave.
+  awk -F: '
+    FILENAME==ARGV[1] { if($1!="soporte") samba[$1]=1; next }
+    $3>=1000 && $3<65534 && $1!="soporte" && !($1 in samba) {
+      print "[!] Cuenta Linux sin credencial Samba: " $1 > "/dev/stderr"; error=1
+    }
+    END {exit error}
+  ' "$dir/credenciales_samba.txt" "$dir/usuarios_linux.txt" || return 1
+  while IFS=: read -r usuario uid lm hash flags resto; do
+    [[ "$usuario" != soporte ]] || continue
+    registro=$(awk -F: -v u="$usuario" '$1==u {print;exit}' "$dir/usuarios_linux.txt")
+    [[ -n "$registro" ]] || { echo "[!] Falta identidad Linux: $usuario" >&2; return 1; }
+    cred_uid="$uid"
+    IFS=: read -r _ _ uid gid _ <<< "$registro"
+    [[ "$cred_uid" == "$uid" ]] || { echo "[!] UID Samba/Linux distinto en origen: $usuario" >&2; return 1; }
+    [[ "$uid" =~ ^[0-9]+$ ]] && ((uid>=1000 && uid<65534)) || return 1
+    awk -F: -v g="$gid" '$3==g {found=1} END {exit !found}' "$dir/grupos_linux.txt" || return 1
+    if [[ "$flags" == *D* || "$flags" == *L* ]]; then
+      echo "[!] Cuenta bloqueada/deshabilitada en origen: $usuario" >&2; return 1
+    fi
+    if id "$usuario" >/dev/null 2>&1 && [[ "$(id -u "$usuario")" != "$uid" ]]; then
+      echo "[!] UID distinto para $usuario; resuelve el conflicto antes de importar." >&2; return 1
+    fi
+  done < "$dir/credenciales_samba.txt"
 }
 
 importar_samba_hashes() {
-  [[ -f "$1/passdb.tdb" ]] || return 0
-  restaurar_base_samba "$1/passdb.tdb" /var/lib/samba/private/passdb.tdb || return 1
-  echo 'Base Samba restaurada; no se reemplazó secrets.tdb.'
-}
-
-opcion_secrets_tdb() {
-  advertencia_secrets_tdb
-  if confirm '¿Cambiar SID?'; then
-    [[ -f "$1/secrets.tdb" ]] || return 1
-    restaurar_base_samba "$1/secrets.tdb" /var/lib/samba/private/secrets.tdb || return 1
-    echo 'SID cambiado: comprueba los vínculos Samba del destino.'
+  local dir="$1" usuario uid lm hash flags resto
+  local entrada="$BACKUP_IMPORTACION/credenciales-importar.txt"
+  (umask 077; awk -F: '$1!="soporte"' "$dir/credenciales_samba.txt" > "$entrada") || return 1
+  pdbedit -e "tdbsam:$BACKUP_IMPORTACION/cuentas-antes.tdb" > "$BACKUP_IMPORTACION/respaldo-samba.log" 2>&1 || return 1
+  # Se incorporan las cuentas del origen; las exclusivas del destino se conservan.
+  if [[ -s "$entrada" ]]; then
+    pdbedit -i "smbpasswd:$entrada" > "$BACKUP_IMPORTACION/importacion-samba.log" 2>&1 || {
+      echo '[!] Falló Samba; puede existir una importación parcial. Respaldo conservado.' >&2; return 1;
+    }
   fi
-  return 0
+  while IFS=: read -r usuario uid lm hash flags resto; do
+    pdbedit -u "$usuario" -c '[X]' >/dev/null || return 1
+    verificar_hash_samba "$usuario" "$hash" || { echo "[!] Credencial no verificada: $usuario" >&2; return 1; }
+    echo "[VERIFICADO] $usuario: contraseña del origen, sin vencimiento."
+  done < "$entrada"
 }
-
 importar_run() {
   require_root
   local export_dir seleccion BACKUP_IMPORTACION
   export_dir="${1:-}"
   if [[ -z "$export_dir" ]]; then export_dir=$(seleccionar_export) || return 1; fi
   [[ -d "$export_dir" && -f "$export_dir/manifest.txt" ]] || { echo "[!] Carpeta de exportación inválida." >&2; return 1; }
+  validar_export_importacion "$export_dir" || return 1
   analizar_migracion "$export_dir" || { echo '[!] Corrige los conflictos antes de importar.' >&2; return 1; }
-  seleccion=$(menu_seleccionar_importacion) || return 1
+  seleccion="usuarios,grupos,membresias,samba"
+  echo "Se incorporan identidades, grupos y credenciales del origen. Se conservan las cuentas exclusivas del destino y su SID."
   [[ -n "$seleccion" ]] || return 1
   confirm '¿Aplicar?' || return 0
   mkdir -p "${LOG_DIR:-$REPO_PATH/logs}" || return 1
@@ -158,7 +183,7 @@ importar_run() {
   if [[ "$seleccion" == *membresias* ]]; then importar_membresias "$export_dir" || return 1; fi
   if [[ "$seleccion" == *samba* ]]; then
     importar_samba_hashes "$export_dir" || return 1
-    if [[ -f "$export_dir/secrets.tdb" ]]; then opcion_secrets_tdb "$export_dir" || return 1; fi
+
   fi
   echo 'Importación completada. Los respaldos no se eliminan.'
 }

@@ -22,6 +22,8 @@ leer_csv() {
     mensaje=""
     if [[ ! "$usuario" =~ ^[a-z_][a-z0-9._-]*$ ]]; then
       mensaje='Nombre de usuario inválido.'
+    elif [[ "$usuario" == soporte ]]; then
+      mensaje='soporte se administra fuera de la carga Samba.'
     elif [[ -n "${vistos[$usuario]:-}" ]]; then
       mensaje='Usuario duplicado en el archivo.'
     elif [[ -z "$nombre" || "$nombre" == *:* ]]; then
@@ -36,8 +38,10 @@ leer_csv() {
       mensaje='UID inválido; déjalo vacío para asignación automática.'
     elif [[ -z "$password" || "$password" == *:* ]]; then
       mensaje='Contraseña vacía o con dos puntos; no se admite : ni |.'
-    elif [[ -n "$uid" ]] && ((10#$uid == 0)); then
-      mensaje='No se permite UID 0.'
+    elif [[ -n "$uid" ]] && ((10#$uid < 1000 || 10#$uid >= 65534)); then
+      mensaje='UID fuera del rango de cuentas de trabajo (1000..65533).'
+    elif id "$usuario" >/dev/null 2>&1 && [[ -n "$uid" ]] && [[ "$(id -u "$usuario")" != "$((10#$uid))" ]]; then
+      mensaje="UID distinto para $usuario; no se cambia automáticamente."
     elif ! id "$usuario" >/dev/null 2>&1 && [[ -n "$uid" ]] && getent passwd "$((10#$uid))" >/dev/null 2>&1; then
       mensaje="UID $uid ocupado en el equipo destino."
     fi
@@ -64,87 +68,71 @@ leer_csv() {
   for linea in "${USUARIOS_LEIDOS[@]}"; do
     IFS='|' read -r usuario nombre grupo dominio uid password <<< "$linea"
     mensaje=CREAR
-    id "$usuario" >/dev/null 2>&1 && mensaje='OMITIR (ya existe)'
+    id "$usuario" >/dev/null 2>&1 && mensaje='ACTUALIZAR contraseña desde CSV'
     printf '%s | %s | %s | %s | %s | %s\n' "$usuario" "$nombre" "$grupo" "$dominio" "${uid:-automático}" "$mensaje"
   done
 }
 
 aplicar_carga_masiva() {
-  local linea usuario nombre grupo dominio uid password fecha comando estado
-  local creados=0 omitidos=0 fallidos=0
-  local -a opciones
   require_root
-  for comando in useradd groupadd chpasswd chage smbpasswd pdbedit getent net; do
-    command -v "$comando" >/dev/null 2>&1 || { echo "[!] Falta $comando." >&2; return 1; }
+  local linea usuario nombre grupo dominio uid password comando estado esperado
+  local creados=0 actualizados=0 fallidos=0
+  local -a opciones
+  for comando in useradd groupadd chpasswd chage smbpasswd pdbedit getent net openssl iconv; do
+    command -v "$comando" >/dev/null || { echo "[!] Falta $comando" >&2; return 1; }
   done
-  mkdir -p "$DATA_DIR" "$EXPORT_PATH" || return 1
-  local auditoria="$EXPORT_PATH/usuarios_entrada.csv"
+  # Comprueba soporte MD4 antes de crear o actualizar cuentas.
+  hash_password_nt prueba >/dev/null || { echo '[!] OpenSSL no permite calcular hashes NT.' >&2; return 1; }
+  local respaldo auditoria
+  respaldo=$(mktemp -d "$LOG_DIR/carga.XXXXXX") || return 1
+  chmod 700 "$respaldo" || return 1
+  pdbedit -e "tdbsam:$respaldo/cuentas-antes.tdb" > "$respaldo/respaldo.log" 2>&1 || return 1
+  cp -p /etc/shadow "$respaldo/shadow-antes" || return 1
+  chmod 600 "$respaldo/shadow-antes" || return 1
+  auditoria="$EXPORT_PATH/usuarios_entrada.csv"
   (umask 077; printf 'usuario|nombre|grupo|dominio|uid|estado\n' > "$auditoria") || return 1
-  chmod 600 "$auditoria" || return 1
-  fecha=$(date +%Y-%m-%d)
   for linea in "${USUARIOS_LEIDOS[@]}"; do
     IFS='|' read -r usuario nombre grupo dominio uid password <<< "$linea"
-    estado=OMITIDO
-    if ! getent group "$grupo" >/dev/null 2>&1; then
-      groupadd "$grupo" || { echo "[!] No se pudo crear $grupo." >&2; USUARIOS_LEIDOS=(); return 1; }
-    fi
-    asegurar_grupo_samba "$grupo" || { echo "[!] No se pudo registrar $grupo en Samba." >&2; USUARIOS_LEIDOS=(); return 1; }
-    if ! registrar_grupo_catalogo "$grupo"; then
-      echo "[!] No se pudo guardar el grupo $grupo en el catálogo." >&2
-      USUARIOS_LEIDOS=()
-      return 1
-    fi
-    if id "$usuario" >/dev/null 2>&1; then
-      omitidos=$((omitidos+1))
-      echo "[OMITIDO] $usuario ya existe; conserva su contraseña."
-    else
+    estado=ACTUALIZADO
+    if ! getent group "$grupo" >/dev/null; then groupadd "$grupo" || return 1; fi
+    asegurar_grupo_samba "$grupo" || return 1
+    registrar_grupo_catalogo "$grupo" || return 1
+    if ! id "$usuario" >/dev/null 2>&1; then
       opciones=(-M -d /nonexistent -s /usr/sbin/nologin -g "$grupo" -c "$nombre")
-      [[ -n "$uid" ]] && opciones+=(-u "$uid")
-      if ! useradd "${opciones[@]}" "$usuario"; then
-        estado=ERROR_CREACION
-      elif ! printf '%s:%s\n' "$usuario" "$password" | chpasswd; then
-        estado=ERROR_PASSWORD_LINUX
-      elif ! chage -m 0 -M -1 -I -1 -E -1 -d "$fecha" "$usuario"; then
-        estado=ERROR_VIGENCIA
-      elif ! printf '%s\n%s\n' "$password" "$password" | smbpasswd -s -a "$usuario"; then
-        estado=ERROR_SAMBA
-      elif ! smbpasswd -e "$usuario"; then
-        estado=ERROR_SAMBA
-      elif ! pdbedit -u "$usuario" -c '[X]' >/dev/null; then
-        estado=ERROR_VIGENCIA_SAMBA
-      else
-        uid=$(id -u "$usuario")
-        if printf '%s|%s|%s||%s|%s\n' "$usuario" "$nombre" "$grupo" "$uid" "$fecha" >> "$DATA_DIR/usuarios.db"; then
-          estado=CREADO; creados=$((creados+1))
-          echo "[CREADO] $usuario: contraseña permanente en Linux y Samba."
-        else estado=ERROR_REGISTRO; fi
-      fi
-      if [[ "$estado" == ERROR_* ]]; then
-        fallidos=$((fallidos+1))
-        echo "[!] $usuario: $estado. Puede haberse creado parcialmente; revisa la cuenta antes de reintentar." >&2
-      fi
+      [[ -z "$uid" ]] || opciones+=(-u "$uid")
+      if useradd "${opciones[@]}" "$usuario"; then estado=CREADO; else estado=ERROR_CREACION; fi
     fi
+    if [[ "$estado" != ERROR_* ]]; then
+      if ! establecer_password_permanente "$usuario" "$password"; then
+        estado=ERROR_CREDENCIAL
+      elif ! registrar_usuario_catalogo "$usuario"; then estado=ERROR_REGISTRO; fi
+    fi
+    uid=$(id -u "$usuario" 2>/dev/null) || uid=''
     printf '%s|%s|%s|%s|%s|%s\n' "$usuario" "$nombre" "$grupo" "$dominio" "$uid" "$estado" >> "$auditoria" || return 1
+    case "$estado" in
+      CREADO) creados=$((creados+1)); echo "[CREADO Y VERIFICADO] $usuario" ;;
+      ACTUALIZADO) actualizados=$((actualizados+1)); echo "[ACTUALIZADO Y VERIFICADO] $usuario" ;;
+      *) fallidos=$((fallidos+1)); echo "[!] $usuario: $estado; respaldo en $respaldo" >&2 ;;
+    esac
   done
   USUARIOS_LEIDOS=()
-  echo "Resultado: $creados creados, $omitidos omitidos, $fallidos errores."
-  ((fallidos == 0))
+  echo "Resultado: $creados creados, $actualizados actualizados, $fallidos errores. Respaldo: $respaldo"
+  ((fallidos==0))
 }
-
 carga_masiva_workflow() {
   local archivo="${1:-}" resultado
   echo '=== Carga Masiva de Usuarios ==='
   echo 'Formato: usuario|nombre|grupo|dominio|uid|password'
   echo 'El UID puede quedar vacío. Las contraseñas se usan tal cual, sin vencimiento.'
   echo 'Los grupos de trabajo faltantes se crean y registran en Samba. El dominio es una referencia.'
-  echo 'Los usuarios existentes se omiten y conservan sus contraseñas.'
+  echo 'Las cuentas existentes reciben la contraseña del CSV; se conservan home, shell y grupos actuales.'
   echo 'Las cuentas nuevas son solo para Samba: sin carpeta personal ni consola/SSH.'
   if [[ -z "$archivo" ]]; then
     read -r -p 'Ruta del archivo CSV: ' archivo || return 1
   fi
   archivo="${archivo/#\~/$HOME}"
   leer_csv "$archivo" || return 1
-  if confirm "¿Crear ${#USUARIOS_LEIDOS[@]} usuarios del archivo (omitiendo existentes)?"; then
+  if confirm "¿Aplicar las contraseñas del CSV a ${#USUARIOS_LEIDOS[@]} cuentas, incluidas las existentes?"; then
     aplicar_carga_masiva
     resultado=$?
     USUARIOS_LEIDOS=()
