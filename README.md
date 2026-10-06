@@ -15,33 +15,31 @@ Las altas nuevas se crean sin carpeta personal ni consola (`/nonexistent`, `nolo
 
 ```bash
 cd /opt/scripts/SCR-DIAG-REP
-sudo bash src/script.sh
+bash src/script.sh ayuda
+sudo bash src/script.sh exportar
+# En la NAS, después de copiar la carpeta:
+sudo bash src/script.sh importar /home/soporte/export_srv-2_FECHA_HORA
+sudo bash src/script.sh listar-grupos
+sudo bash src/script.sh listar-usuarios
 ```
 
-1. Diagnóstico.
-2. Exportar configuración.
-3. Importar una exportación.
-4. Gestión de exportaciones.
-5. Gestión de equipos/grupos de trabajo.
-6. Gestión de usuarios, incluida carga masiva.
-7. Salir.
+Flujo fijo: **exportar en servidor → copiar carpeta completa → importar en NAS → verificar → gestionar ACL en su repositorio**.
 
-`src/menu.sh` y `src/main.sh` conservan acceso al mismo menú. No hay scripts de pruebas en el flujo funcional.
+[Comandos rápidos y flujo completo servidor/NAS](src/docs/wiki/COMANDOS_RAPIDOS.md).
 
-Carga CSV: menú 6 → 5 → 1, formato UTF-8:
+Para carga masiva: `sudo bash src/script.sh carga-masiva /ruta/usuarios.csv`.
+Formato UTF-8: `usuario|nombre|grupo|dominio|uid|password`. El UID puede quedar vacío. Las cuentas existentes se omiten y conservan sus credenciales; el dominio es referencia de auditoría.
 
-```text
-usuario|nombre|grupo|dominio|uid|password
-```
+La única entrada es `src/script.sh ACCION`. Sin argumentos muestra ayuda. `usuarios`, `equipos` y `exportaciones` abren su administración específica. No existe un menú principal duplicado ni scripts de pruebas en el flujo.
 
-UID vacío permite asignación automática. Los usuarios existentes se omiten; sus credenciales no se cambian. El dominio es referencia de auditoría. Las importaciones preservan respaldos en `logs/importacion.*` y no anuncian éxito si falla un componente. Restaurar bases Samba completas sustituye sus credenciales: revisar antes de confirmar.
+Importar bases Samba completas sustituye sus credenciales; revisa el análisis antes de confirmar. Los respaldos se conservan en `logs/importacion.*`.
 
 ## Diagrama de secuencia (Entradas y Salidas)
 
 ```text
-[Menú / CSV / carpeta exportada]
+[Acción / CSV / carpeta exportada]
               ↓
-[src/script.sh → menú → módulo seleccionado]
+[src/script.sh ACCION → módulo seleccionado]
               ↓
 [Identidades Linux + Samba / src/config/data / src/export / logs]
 ```
@@ -52,8 +50,6 @@ UID vacío permite asignación automática. Los usuarios existentes se omiten; s
 SCR-DIAG-REP/
 ├── src/
 │   ├── script.sh          ← Entrada principal
-│   ├── menu.sh            ← Menú común
-│   ├── main.sh            ← Acceso compatible
 │   ├── iniciar.sh         ← Rutas, catálogos y registro
 │   ├── utils.sh           ← Funciones compartidas
 │   ├── modules/           ← Operaciones funcionales
@@ -64,7 +60,7 @@ SCR-DIAG-REP/
 │   ├── export/            ← Exportaciones locales, fuera de Git
 │   ├── docs/              ← Wiki, guías e historial
 │   ├── examples/          ← Ejemplos de entrada
-│   └── legacy/            ← Código anterior, no cargado por el menú
+│   └── legacy/            ← Código anterior, fuera del flujo funcional
 ├── logs/                  ← Registros y respaldos, fuera de Git
 ├── BITACORA.md
 └── README.md
@@ -85,12 +81,12 @@ git stash push -m "Catalogos anteriores antes de reorganizar" -- config/data/usu
 git pull --ff-only origin main
 sudo mkdir -p src/config/data
 sudo cp -a "$respaldo/data/." src/config/data/
-sudo bash src/script.sh
+sudo bash src/script.sh ayuda
 ```
 
 Ejecutar cada comando solo si el anterior termina correctamente. No aplicar `git stash pop` sobre las rutas antiguas: la copia respaldada ya quedó en las rutas nuevas. Esta migración no recrea cuentas Linux/Samba ni cambia contraseñas.
 
-Si el equipo ya tiene la nueva estructura, basta `git pull --ff-only origin main` y `sudo bash src/script.sh`.
+Si el equipo ya tiene la nueva estructura, basta `git pull --ff-only origin main` y `sudo bash src/script.sh ayuda`.
 
 ## Documentación
 

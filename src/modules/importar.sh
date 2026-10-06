@@ -137,7 +137,9 @@ opcion_secrets_tdb() {
 importar_run() {
   require_root
   local export_dir seleccion BACKUP_IMPORTACION
-  export_dir=$(seleccionar_export) || return 1
+  export_dir="${1:-}"
+  if [[ -z "$export_dir" ]]; then export_dir=$(seleccionar_export) || return 1; fi
+  [[ -d "$export_dir" && -f "$export_dir/manifest.txt" ]] || { echo "[!] Carpeta de exportación inválida." >&2; return 1; }
   analizar_migracion "$export_dir" || { echo '[!] Corrige los conflictos antes de importar.' >&2; return 1; }
   seleccion=$(menu_seleccionar_importacion) || return 1
   [[ -n "$seleccion" ]] || return 1

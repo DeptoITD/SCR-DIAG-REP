@@ -132,14 +132,16 @@ aplicar_carga_masiva() {
 }
 
 carga_masiva_workflow() {
-  local archivo resultado
+  local archivo="${1:-}" resultado
   echo '=== Carga Masiva de Usuarios ==='
   echo 'Formato: usuario|nombre|grupo|dominio|uid|password'
   echo 'El UID puede quedar vacío. Las contraseñas se usan tal cual, sin vencimiento.'
   echo 'Los grupos de trabajo faltantes se crean y registran en Samba. El dominio es una referencia.'
   echo 'Los usuarios existentes se omiten y conservan sus contraseñas.'
   echo 'Las cuentas nuevas son solo para Samba: sin carpeta personal ni consola/SSH.'
-  read -r -p 'Ruta del archivo CSV: ' archivo || return 1
+  if [[ -z "$archivo" ]]; then
+    read -r -p 'Ruta del archivo CSV: ' archivo || return 1
+  fi
   archivo="${archivo/#\~/$HOME}"
   leer_csv "$archivo" || return 1
   if confirm "¿Crear ${#USUARIOS_LEIDOS[@]} usuarios del archivo (omitiendo existentes)?"; then

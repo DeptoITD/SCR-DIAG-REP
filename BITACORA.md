@@ -14,3 +14,4 @@
 | v0.8 | 2026-10-06 | IT+D | Limpieza | Retirada de pruebas del repositorio y de copias generadas del seguimiento de Git; datos y exportaciones locales ignorados |
 
 El historial narrativo anterior se conserva en [src/docs/historico/BITACORA_20261005.md](src/docs/historico/BITACORA_20261005.md). Las fechas de entradas anteriores se conservan allí tal como fueron registradas; esta tabla resume los cambios sin declarar una fecha de creación original no verificada.
+| v0.9 | 2026-10-06 | IT+D | Flujo | Una entrada con acciones explícitas; retiro de main/menu duplicados; comandos rápidos servidor/NAS en wiki, rutas directas para CSV e importación |

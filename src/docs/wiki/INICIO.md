@@ -2,22 +2,9 @@
 
 Actualizado: 2026-10-06.
 
-## Entrada y menú vigente
+## Entrada y flujo vigente
 
-```bash
-cd /opt/scripts/SCR-DIAG-REP
-sudo bash src/script.sh
-```
-
-1. Diagnóstico de equipo.
-2. Exportar configuración.
-3. Importar configuración desde una exportación.
-4. Gestión de exportaciones.
-5. Gestión de equipos/grupos de trabajo.
-6. Gestión de usuarios; incluye carga masiva.
-7. Salir.
-
-Esta guía corresponde a `src/menu.sh` y `src/modules/`. `src/main.sh` y `src/menu.sh` son accesos compatibles al mismo flujo; la entrada principal es `src/script.sh`.
+Única entrada: `src/script.sh ACCION`. Consulta [Comandos rápidos — servidor y NAS](COMANDOS_RAPIDOS.md) para el flujo fijo exportar → copiar → importar → verificar y los comandos actuales.
 
 ## Grupos Linux, de sistema y de trabajo Samba
 
@@ -47,8 +34,8 @@ Las filas personalizadas con descripción distinta de `Grupo Linux` se conservan
 | Linux/NSS, normalmente `/etc/passwd` | Usuario y GID primario, home y shell | `getent passwd USUARIO` |
 | Base de vínculos Samba, según su backend/configuración | Grupo Windows/SID vinculado al grupo Linux | `sudo net groupmap list` |
 | Base de cuentas Samba, según su backend/configuración | Credenciales y propiedades Samba | `sudo pdbedit -L` |
-| `src/config/data/equipos.db` | `grupo|display|gid|descripcion|fecha` | Menú 5 → 1 |
-| `src/config/data/usuarios.db` | Usuario, nombre, grupo primario, extras, UID y fecha | Menú 6 → 1 |
+| `src/config/data/equipos.db` | `grupo|display|gid|descripcion|fecha` | `listar-grupos` |
+| `src/config/data/usuarios.db` | Usuario, nombre, grupo primario, extras, UID y fecha | `listar-usuarios` |
 | `src/export/usuarios_entrada.csv` | Resultado de la última carga, sin contraseñas | Carga masiva → 2 |
 | `src/export/export_HOST_FECHA/grupos_linux.txt` | Grupos del origen, incluidos grupos de sistema | Exportación → archivo |
 
@@ -76,10 +63,10 @@ Estas son las descripciones del catálogo inicial y las observadas en el NAS. Lo
 ```bash
 cd /opt/scripts/SCR-DIAG-REP
 git pull --ff-only origin main
-sudo bash src/script.sh
+sudo bash src/script.sh listar-grupos
 ```
 
-Selecciona 5 → 1. La sincronización registra los grupos de trabajo que ya existen en Linux y crea sus vínculos Samba si faltan, sin duplicarlos. Si Samba rechaza el registro, el programa informa el error; no asumir que todos están vinculados sin verificar:
+La sincronización registra los grupos de trabajo que ya existen en Linux y crea sus vínculos Samba si faltan, sin duplicarlos. Si Samba rechaza el registro, el programa informa el error; no asumir que todos están vinculados sin verificar:
 
 ```bash
 sudo net groupmap list
@@ -95,7 +82,7 @@ Formato UTF-8, seis columnas separadas por `|`:
 usuario|nombre|grupo|dominio|uid|password
 ```
 
-Menú 6 → 5 → 1. El UID puede quedar vacío para asignación automática. La contraseña se usa exactamente como aparece, sin vencimiento y sin cambio obligatorio al primer ingreso en la carga masiva. El dominio del CSV es una referencia de auditoría; no agrega automáticamente una membresía ni configura un dominio Samba.
+Ejecuta `sudo bash src/script.sh carga-masiva /ruta/usuarios.csv`. El UID puede quedar vacío para asignación automática. La contraseña se usa exactamente como aparece, sin vencimiento y sin cambio obligatorio al primer ingreso en la carga masiva. El dominio del CSV es una referencia de auditoría; no agrega automáticamente una membresía ni configura un dominio Samba.
 
 La carga crea grupos de trabajo faltantes en Linux, registra el vínculo Samba y guarda el catálogo. Las cuentas nuevas se crean con `-M -d /nonexistent -s /usr/sbin/nologin`; tienen identidad Linux para permisos, sin home nuevo ni consola. Los usuarios existentes se omiten sin cambiar contraseñas ni su shell. Las excepciones administrativas `soporte`, `sara.albarracin` y `juan.rojas` existentes no se convierten por esta carga.
 
