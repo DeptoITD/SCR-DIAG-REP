@@ -24,18 +24,22 @@ usuario_listar() {
 
 # Solo permite eliminar archivos idénticos al esqueleto inicial y carpetas vacías.
 home_solo_inicial() {
-  local ruta="$1" skel="${2:-/etc/skel}" item relativo
+  local ruta="$1" skel="${2:-/etc/skel}" item relativo enlace_actual enlace_inicial
   [[ -d "$ruta" && ! -L "$ruta" && -d "$skel" ]] || return 1
   while IFS= read -r -d '' item; do
     relativo="${item#"$ruta"/}"
-    [[ ! -L "$item" ]] || return 1
-    if [[ -f "$item" ]]; then
+    if [[ -L "$item" ]]; then
+      [[ -L "$skel/$relativo" ]] || return 1
+      enlace_actual=$(readlink -- "$item") || return 1
+      enlace_inicial=$(readlink -- "$skel/$relativo") || return 1
+      [[ "$enlace_actual" == "$enlace_inicial" ]] || return 1
+    elif [[ -f "$item" ]]; then
       [[ -f "$skel/$relativo" && ! -L "$skel/$relativo" ]] || return 1
       cmp -s -- "$item" "$skel/$relativo" || return 1
     elif [[ -d "$item" ]]; then
       [[ -d "$skel/$relativo" && ! -L "$skel/$relativo" ]] || return 1
     else return 1; fi
-  done < <(find "$ruta" -mindepth 1 -print0)
+  done < <(find -P "$ruta" -mindepth 1 -print0)
 }
 
 home_ruta_segura() {
@@ -74,7 +78,7 @@ usuarios_limpiar_homes() {
     # Revalidar antes de eliminar: no usar una comprobación antigua.
     if ! home_ruta_segura "$user"; then echo "[CONSERVADO] $user: la carpeta cambió."; fallos=$((fallos+1)); continue; fi
     if ! usermod -d /nonexistent -s /usr/sbin/nologin "$user" ||
-       ! find "/home/$user" -xdev -depth -delete ||
+       ! find -P "/home/$user" -xdev -depth -delete ||
        ! registrar_usuario_catalogo "$user"; then
       echo "[ERROR] $user: puede haber cambios parciales." >&2; fallos=$((fallos+1)); continue
     fi
@@ -124,7 +128,7 @@ usuario_perfil_samba() {
   printf '%s\n' "$registro" > "$respaldo/usuario-antes.txt" || return 1
   sudo usermod -g "$grupo" -G '' -d /nonexistent -s /usr/sbin/nologin "$user" || return 1
   if [[ -d "$ruta" ]]; then
-    home_ruta_segura "$user" && sudo find "$ruta" -xdev -depth -delete || {
+    home_ruta_segura "$user" && sudo find -P "$ruta" -xdev -depth -delete || {
       echo "[!] Perfil cambiado; no se pudo eliminar el home inicial. Revisa $ruta y $respaldo." >&2; return 1;
     }
   fi

@@ -18,3 +18,4 @@ El historial narrativo anterior se conserva en [src/docs/historico/BITACORA_2026
 | v1.0 | 2026-10-06 | IT+D | Credenciales | Exportación validada con hashes portables; importación por cuentas sin reemplazar base/SID y con verificación; carga CSV sincroniza cuentas existentes, excluye soporte y conserva respaldos privados |
 | v1.0 | 2026-10-06 | IT+D | Usuarios | Alta manual con grupo único; edición aplica perfil Samba sin home/consola, retira grupos extra, respalda carpetas antiguas y protege cuentas administrativas |
 | v1.0 | 2026-10-06 | IT+D | Limpieza | Limpieza confirmada de homes Samba idénticos a /etc/skel para liberar espacio; conserva archivos personales, montajes, enlaces y cuentas administrativas; perfil manual deja de mover homes a logs |
+| v1.0 | 2026-10-06 | IT+D | Corrección | La limpieza acepta enlaces iniciales como .face.icon idénticos a /etc/skel; compara sus destinos literales y borra sin seguir enlaces |

@@ -126,7 +126,7 @@ Ejecuta `sudo bash src/script.sh usuarios`. Crear usuario asigna únicamente el 
 
 En Editar usuario, opción 3 selecciona el grupo único y aplica `/nonexistent` y `nologin`; opción 4 aplica el mismo perfil usando el grupo primario actual. Se muestra el cambio y se confirma antes de retirar todas las membresías adicionales. Las contraseñas Samba no se cambian por esta operación.
 
-Una carpeta antigua `/home/usuario` se elimina definitivamente después de confirmar, únicamente si todos sus archivos son idénticos a los iniciales de `/etc/skel`. Se conservan respaldos privados de los registros Linux, no una copia de la carpeta. Si hay archivos personales o modificados, se rechaza la conversión y se conserva el home. Se rechazan enlaces, rutas personales no estándar y montajes. Las cuentas soporte, sara.albarracin y juan.rojas están protegidas de esta conversión.
+Una carpeta antigua `/home/usuario` se elimina definitivamente después de confirmar, únicamente si todos sus archivos son idénticos a los iniciales de `/etc/skel`. Se conservan respaldos privados de los registros Linux, no una copia de la carpeta. Si hay archivos personales o modificados, se rechaza la conversión y se conserva el home. Se rechazan homes que sean enlaces, rutas personales no estándar y montajes. Los enlaces interiores solo se aceptan si tienen el mismo destino literal que su equivalente en /etc/skel; se eliminan sin seguirlos. Las cuentas soporte, sara.albarracin y juan.rojas están protegidas de esta conversión.
 
 El grupo privado antiguo no se elimina automáticamente porque puede existir como propietario de archivos o ACL en otros sitios. Puede permanecer como grupo sin pertenencias; `id usuario` debe mostrar únicamente el grupo asignado.
 
@@ -134,7 +134,7 @@ Este perfil se aplica desde la gestión manual. La importación y la carga CSV c
 
 ## Liberar espacio de homes antiguos
 
-En servidor y NAS, ejecuta `sudo bash src/script.sh limpiar-homes`. Muestra candidatos y pide confirmación antes de borrar. Solo considera cuentas Samba que existen en Linux y carpetas `/home/usuario` sin enlaces ni montajes. Todos los archivos deben coincidir byte a byte con `/etc/skel`; contenido adicional o modificado se conserva para revisión.
+En servidor y NAS, ejecuta `sudo bash src/script.sh limpiar-homes`. Muestra candidatos y pide confirmación antes de borrar. Solo considera cuentas Samba que existen en Linux y carpetas `/home/usuario` que no sean enlaces ni contengan montajes. Todos los archivos deben coincidir byte a byte con `/etc/skel`; contenido adicional o modificado se conserva para revisión. Se admiten enlaces iniciales como `.face.icon` únicamente cuando coinciden con el enlace de `/etc/skel`; `find -P` elimina el enlace sin seguirlo.
 
 Después de confirmar, elimina los homes iniciales y establece `/nonexistent` y `nologin`. Conserva grupos y contraseñas. Excluye soporte, sara.albarracin y juan.rojas. Los respaldos de registros Linux se conservan en `logs/limpieza-homes.*`; no se respalda el contenido eliminado. Una falla puede dejar cambios parciales y se informa como incidencia.
 
