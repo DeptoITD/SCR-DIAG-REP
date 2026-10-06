@@ -100,7 +100,7 @@ La importación valida todos los archivos antes de confirmar, incorpora grupos y
 
 Las contraseñas compartidas se toman del origen. Las cuentas exclusivas del destino se conservan. `soporte` se excluye de Samba, aunque su administración Linux permanece. Cada credencial se verifica por hash y estado habilitado; no se muestra el hash. Se establece contraseña Samba sin vencimiento.
 
-No se copia `passdb.tdb` sobre la base del destino ni se importa `secrets.tdb`: se conserva su SID. No se modifica fstab ni la configuración de recursos compartidos. Las exportaciones v0.5 sin credenciales deben regenerarse.
+No se copia `passdb.tdb` sobre la base del destino ni se importa `secrets.tdb`: se conserva su SID. No se modifica fstab. Los recursos de archivos de smb.conf se preparan y validan con rutas del destino antes de aplicar; se conserva la sección global. Las exportaciones v0.5 sin credenciales deben regenerarse.
 
 Los respaldos quedan en `logs/importacion.*`. Una falla detiene el flujo y no anuncia éxito; puede haber cambios parciales y se conserva el respaldo para revisarlos. Las ACL deben comprobarse en el almacenamiento por separado.
 
@@ -139,3 +139,13 @@ En servidor y NAS, ejecuta `sudo bash src/script.sh limpiar-homes`. Muestra cand
 Después de confirmar, elimina los homes iniciales y establece `/nonexistent` y `nologin`. Conserva grupos y contraseñas. Excluye soporte, sara.albarracin y juan.rojas. Los respaldos de registros Linux se conservan en `logs/limpieza-homes.*`; no se respalda el contenido eliminado. Una falla puede dejar cambios parciales y se informa como incidencia.
 
 Las carpetas mostradas de 24 KB liberan poco espacio: no se debe borrar el home administrativo para aumentar ese ahorro. Esta opción no elimina respaldos de homes generados por versiones anteriores.
+
+## Importar smb.conf y publicar recursos
+
+Regenera la exportación con v1.1 para incluir configuración efectiva normalizada y su original. Al importar, cada recurso muestra la ruta del origen y pregunta por la ruta absoluta del destino; presionar Enter acepta la ruta propuesta. La ruta debe existir. No se crean carpetas, no se copian datos ni se cambian ACL.
+
+Un recurso existente se conserva por defecto; responde s para actualizarlo desde el origen. Se utiliza su ruta actual como propuesta para evitar trasladar rutas del servidor literalmente a la NAS. Recursos definidos en includes externos requieren revisión antes de sobrescribirlos. No se importan global, homes, printers, print$ ni IPC$; el flujo está destinado a recursos de archivos de cuentas Samba.
+
+La configuración global del destino se conserva, por lo que sus restricciones globales siguen aplicando. El candidato se comprueba con testparm antes de cambiar identidades; tras importar credenciales se instala la configuración, se vuelve a validar y se recarga con smbcontrol. El respaldo smb.conf.antes y los registros quedan en logs/importacion.*. Si falla, se restaura smb.conf; las identidades ya importadas no se revierten automáticamente.
+
+En Windows comprueba `\\IP_NAS\NombreDelRecurso`. Que el recurso esté configurado no demuestra permisos efectivos: comprueba sus grupos y ACL en almacenamiento. No agregues soporte a valid users si no tendrá una cuenta Samba.

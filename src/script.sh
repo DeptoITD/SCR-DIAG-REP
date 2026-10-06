@@ -33,7 +33,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/iniciar.sh" || exit 1
 require_root
-for modulo in diagnostico exportar importar sync equipos usuarios carga_masiva; do
+for modulo in diagnostico recursos_samba exportar importar sync equipos usuarios carga_masiva; do
   source "$SCRIPT_DIR/modules/$modulo.sh" || exit 1
 done
 log "Inicio de acción: $accion" >/dev/null

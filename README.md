@@ -95,3 +95,8 @@ Si el equipo ya tiene la nueva estructura, basta `git pull --ff-only origin main
 - [Bitácora](BITACORA.md).
 
 El verificador de credenciales es una descarga independiente, ejecutada desde Downloads; no es parte del repositorio. Los archivos de entrada con contraseñas se mantienen fuera de Git.
+
+## Recursos compartidos Samba
+La exportación v1.1 incluye `smb.conf` normalizado por `testparm`, con recursos de archivos efectivos, y `smb.conf.original` como referencia. La importación prepara también los recursos: muestra nombres y solicita rutas absolutas existentes en el destino. Si un recurso ya existe, permite conservarlo o actualizarlo; mantiene los recursos exclusivos del destino y su sección global.
+
+Antes de modificar identidades se valida el candidato completo. Después se respalda `smb.conf`, se aplica y se recarga Samba. Si falla la aplicación o recarga, se restaura la configuración anterior y se informa del fallo. No configura ACL ni copia los datos compartidos. La validación sintáctica y la recarga no sustituyen una prueba de acceso desde Windows.

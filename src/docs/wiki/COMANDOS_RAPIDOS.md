@@ -25,7 +25,7 @@ Usa transferencia de archivos de RustDesk o USB. Copia la carpeta exacta mostrad
 cd /opt/scripts/SCR-DIAG-REP
 sudo bash src/script.sh importar /home/soporte/export_srv-2_FECHA_HORA
 ```
-Revisa SID y conflictos UID y confirma. El flujo incorpora grupos, usuarios y membresías; aplica las credenciales del origen y las verifica. Conserva las cuentas exclusivas del destino, excluye `soporte` y conserva el SID del destino. No importa `secrets.tdb` ni sustituye una base completa. Respalda en `logs/importacion.*`. Un UID ocupado o distinto detiene el proceso antes de aplicar. Exportaciones antiguas sin `credenciales_samba.txt` se rechazan: regenera en el origen.
+Revisa SID y conflictos UID y confirma. El flujo prepara los recursos de smb.conf y pide sus rutas del destino, incorpora grupos, usuarios y membresías; aplica las credenciales del origen y las verifica. Valida la configuración y recarga Samba; conserva los recursos exclusivos y la configuración global del destino. Conserva las cuentas exclusivas del destino, excluye `soporte` y conserva el SID del destino. No importa `secrets.tdb` ni sustituye una base completa. Respalda en `logs/importacion.*`. Un UID ocupado o distinto detiene el proceso antes de aplicar. Exportaciones antiguas sin `credenciales_samba.txt` se rechazan: regenera en el origen.
 
 ## 5. Comprobar en la NAS
 ```bash

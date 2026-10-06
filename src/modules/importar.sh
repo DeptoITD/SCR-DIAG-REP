@@ -109,7 +109,7 @@ importar_membresias() {
 
 validar_export_importacion() {
   local dir="$1" usuario uid lm hash flags resto registro gid cred_uid
-  for registro in usuarios_linux.txt grupos_linux.txt membresias.txt credenciales_samba.txt; do
+  for registro in usuarios_linux.txt grupos_linux.txt membresias.txt credenciales_samba.txt smb.conf; do
     [[ -f "$dir/$registro" ]] || { echo "[!] Falta $registro; genera una exportación actual." >&2; return 1; }
   done
   awk -F: 'NF!=7 || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || vistos[$1]++ {error=1} END {exit error}' "$dir/usuarios_linux.txt" || { echo '[!] Identidades Linux inválidas.' >&2; return 1; }
@@ -168,11 +168,13 @@ importar_run() {
   seleccion="usuarios,grupos,membresias,samba"
   echo "Se incorporan identidades, grupos y credenciales del origen. Se conservan las cuentas exclusivas del destino y su SID."
   [[ -n "$seleccion" ]] || return 1
-  confirm '¿Aplicar?' || return 0
+
   mkdir -p "${LOG_DIR:-$REPO_PATH/logs}" || return 1
   BACKUP_IMPORTACION=$(mktemp -d "${LOG_DIR:-$REPO_PATH/logs}/importacion.XXXXXX") || return 1
   chmod 700 "$BACKUP_IMPORTACION" || return 1
   echo "Respaldos conservados: $BACKUP_IMPORTACION"
+  preparar_recursos_samba "$export_dir/smb.conf" /etc/samba/smb.conf "$BACKUP_IMPORTACION" || return 1
+  confirm '¿Aplicar identidades, credenciales y los recursos preparados?' || return 0
   cp -p /etc/passwd "$BACKUP_IMPORTACION/passwd.bak" || return 1
   cp -p /etc/group "$BACKUP_IMPORTACION/group.bak" || return 1
   if [[ -f "$DATA_DIR/usuarios.db" ]]; then cp -p "$DATA_DIR/usuarios.db" "$BACKUP_IMPORTACION/usuarios.db" || return 1; fi
@@ -185,5 +187,6 @@ importar_run() {
     importar_samba_hashes "$export_dir" || return 1
 
   fi
+  aplicar_recursos_samba /etc/samba/smb.conf "$BACKUP_IMPORTACION" || return 1
   echo 'Importación completada. Los respaldos no se eliminan.'
 }

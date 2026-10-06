@@ -22,11 +22,12 @@ exportar_run() {
     cp "$DATA_DIR/$archivo" "$export_dir/$archivo" || return 1
   done
   cp /etc/fstab "$export_dir/fstab.txt" || return 1
-  [[ ! -f /etc/samba/smb.conf ]] || cp /etc/samba/smb.conf "$export_dir/smb.conf" || return 1
+  cp /etc/samba/smb.conf "$export_dir/smb.conf.original" || return 1
+  testparm -s /etc/samba/smb.conf > "$export_dir/smb.conf" 2> "$export_dir/testparm.log" || return 1
   validar_export_importacion "$export_dir" || return 1
   chmod 600 "$export_dir/"* || return 1
   {
-    printf 'hostname=%s\nexport_ts=%s\ntool_version=1.0\nexport_type=merge\n' "$host" "$(date '+%Y-%m-%d %H:%M:%S')"
+    printf 'hostname=%s\nexport_ts=%s\ntool_version=1.1\nexport_type=merge\n' "$host" "$(date '+%Y-%m-%d %H:%M:%S')"
     printf 'samba_sid=%s\n' "$(detectar_samba_sid)"
   } > "$export_dir/manifest.txt" || return 1
   chmod 600 "$export_dir/manifest.txt" || return 1
