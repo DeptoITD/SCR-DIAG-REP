@@ -22,6 +22,55 @@ usuario_listar() {
   echo ""
 }
 
+# Perfil para cuentas de trabajo; mantiene intactas las cuentas administrativas.
+usuario_perfil_samba() {
+  local user="$1" grupo="$2" registro uid home shell respaldo ruta mounts
+  case "$user" in soporte|sara.albarracin|juan.rojas)
+    echo '[!] Cuenta administrativa protegida; no se convierte desde esta opción.' >&2; return 1 ;;
+  esac
+  [[ "$user" =~ ^[a-z_][a-z0-9._-]*$ ]] || return 1
+  es_grupo_trabajo "$grupo" || return 1
+  registro=$(getent passwd "$user") || return 1
+  IFS=: read -r _ _ uid _ _ home shell <<< "$registro"
+  ((uid>=1000 && uid<65534)) || return 1
+  getent group "$grupo" >/dev/null || return 1
+  pdbedit -L -u "$user" | awk -F: -v u="$user" '$1==u {found=1} END {exit !found}' || { echo '[!] Falta la cuenta Samba; carga sus credenciales antes de convertirla.' >&2; return 1; }
+  ruta="/home/$user"
+  # No mover enlaces, homes compartidos ni árboles que contengan montajes.
+  [[ "$home" == "$ruta" || "$home" == /nonexistent ]] || {
+    echo "[!] Home no estándar: $home. Revisa antes de convertir." >&2; return 1;
+  }
+  [[ ! -L "$ruta" ]] || { echo '[!] Home es un enlace; requiere revisión.' >&2; return 1; }
+  if [[ -e "$ruta" ]]; then
+    [[ -d "$ruta" && "$(realpath "$ruta")" == "$ruta" ]] || return 1
+    mounts=$(findmnt -rn -o TARGET) || return 1
+    if printf '%s\n' "$mounts" | awk -v p="$ruta" '$0==p || index($0,p"/")==1 {found=1} END {exit !found}'; then
+      echo '[!] Home contiene un montaje; no se modifica.' >&2; return 1
+    fi
+  fi
+  asegurar_grupo_samba "$grupo" || return 1
+  registrar_grupo_catalogo "$grupo" || return 1
+  echo "Perfil de $user: grupo único $grupo, /nonexistent y nologin."
+  [[ ! -d "$ruta" ]] || echo "Su carpeta $ruta se trasladará a un respaldo privado en logs; no se borran archivos."
+  confirm '¿Aplicar este perfil y retirar los grupos adicionales?' || return 0
+  respaldo=$(mktemp -d "$LOG_DIR/perfil-samba.XXXXXX") || return 1
+  chmod 700 "$respaldo" || return 1
+  cp -p /etc/passwd /etc/group /etc/shadow "$respaldo/" || return 1
+  chmod 600 "$respaldo/"* || return 1
+  printf '%s\n' "$registro" > "$respaldo/usuario-antes.txt" || return 1
+  sudo usermod -g "$grupo" -G '' -d /nonexistent -s /usr/sbin/nologin "$user" || return 1
+  if [[ -d "$ruta" ]]; then
+    sudo mv -- "$ruta" "$respaldo/home" || {
+      echo "[!] Perfil cambiado; no se pudo respaldar el home. Revisa $ruta y $respaldo." >&2; return 1;
+    }
+  fi
+  registrar_usuario_catalogo "$user" || return 1
+  [[ "$(id -gn "$user")" == "$grupo" && "$(id -Gn "$user")" == "$grupo" ]] || return 1
+  registro=$(getent passwd "$user") || return 1
+  [[ "$registro" == *':/nonexistent:/usr/sbin/nologin' && ! -e "$ruta" ]] || return 1
+  echo "[VERIFICADO] $user: solo $grupo, sin home ni consola. Respaldo: $respaldo"
+  echo 'El grupo privado antiguo se conserva si existe: eliminarlo puede afectar archivos o ACL fuera del home.'
+}
 usuario_crear() {
   require_root
   local db="${DATA_DIR}/usuarios.db"
@@ -30,9 +79,10 @@ usuario_crear() {
   local user full_name prim_grupo extra_groups pass uid created
 
   read -r -p "Nombre de usuario (ej: john.doe): " user
-  [[ -z "$user" ]] && return 1
+  [[ "$user" =~ ^[a-z_][a-z0-9._-]*$ && "$user" != soporte ]] || { echo '[!] Usuario inválido o protegido.' >&2; return 1; }
 
   id "$user" &>/dev/null && { error "Usuario ya existe"; return 1; }
+  [[ ! -e "/home/$user" && ! -L "/home/$user" ]] || { echo '[!] Ya existe una carpeta antigua para ese nombre; revísala antes del alta.' >&2; return 1; }
 
   read -r -p "Nombre completo: " full_name
   [[ "$full_name" != *'|'* && "$full_name" != *:* ]] || { echo '[!] Nombre completo inválido.' >&2; return 1; }
@@ -41,7 +91,7 @@ usuario_crear() {
   # Validar grupo
   grep -q "^${prim_grupo}|" "$equipos_db" || { error "Grupo no existe: $prim_grupo"; return 1; }
 
-  extra_groups=$(seleccionar_registro "$equipos_db" 'Grupos adicionales' varios) || return 1
+  extra_groups="" # Altas de trabajo: solo grupo primario.
 
   # Obtener próximo UID
   # Linux asigna un UID libre; no se calcula a partir de un catálogo parcial.
@@ -49,9 +99,11 @@ usuario_crear() {
   # Crear grupo si no existe
   if ! getent group "$prim_grupo" &>/dev/null; then
     local gid=$(grep "^${prim_grupo}|" "$equipos_db" | cut -d'|' -f3)
-    sudo groupadd -g "$gid" "$prim_grupo" || warn "Advertencia: error creando grupo $prim_grupo"
+    sudo groupadd -g "$gid" "$prim_grupo" || return 1
   fi
 
+  asegurar_grupo_samba "$prim_grupo" || return 1
+  registrar_grupo_catalogo "$prim_grupo" || return 1
   # Crear usuario Linux
   sudo useradd -M -d /nonexistent -s /usr/sbin/nologin -g "$prim_grupo" -c "$full_name" "$user" || { error "Error creando usuario Linux"; return 1; }
   uid=$(id -u "$user") || return 1
@@ -59,15 +111,6 @@ usuario_crear() {
   # Generar password
   pass=$(generate_password)
   establecer_password_permanente "$user" "$pass" || { echo '[!] La cuenta se creó parcialmente; falló la contraseña o Samba.' >&2; return 1; }
-
-  # Agregar grupos adicionales
-  if [[ -n "$extra_groups" ]]; then
-    IFS=',' read -ra groups <<< "$extra_groups"
-    for g in "${groups[@]}"; do
-      g=$(echo "$g" | xargs)  # trim
-      sudo gpasswd -a "$user" "$g" || return 1
-    done
-  fi
 
   # Registrar en Samba
 
@@ -90,7 +133,7 @@ usuario_editar() {
   [[ -n "$line" ]] || return 1
 
   echo ""
-  echo "Opciones: 1) Nombre, 2) Contraseña, 3) Grupo primario, 4) Grupos adicionales, 0) Volver"
+  echo "Opciones: 1) Nombre, 2) Contraseña, 3) Grupo único y perfil Samba, 4) Aplicar perfil Samba al grupo actual, 0) Volver"
   read -r -p "Opción: " opt
 
   case "$opt" in
@@ -111,34 +154,11 @@ usuario_editar() {
       local new_grupo
       new_grupo=$(seleccionar_registro "${DATA_DIR}/equipos.db" 'Nuevo grupo primario') || return 1
       grep -q "^${new_grupo}|" "${DATA_DIR}/equipos.db" || { error "Grupo no existe"; return 1; }
-      sudo usermod -g "$new_grupo" "$user" || return 1
-      registrar_usuario_catalogo "$user" || return 1
-      info "Grupo actualizado"
+      usuario_perfil_samba "$user" "$new_grupo" || return 1
       ;;
-    4)  # Grupos adicionales
-      local new_extra
-      new_extra=$(seleccionar_registro "${DATA_DIR}/equipos.db" 'Nuevos grupos adicionales' varios) || return 1
-
-      # Remover de viejos, agregar a nuevos
-      local old_extra=$(echo "$line" | cut -d'|' -f4)
-      if [[ -n "$old_extra" ]]; then
-        IFS=',' read -ra old_groups <<< "$old_extra"
-        for g in "${old_groups[@]}"; do
-          g=$(echo "$g" | xargs)
-          sudo gpasswd -d "$user" "$g" || return 1
-        done
-      fi
-
-      if [[ -n "$new_extra" ]]; then
-        IFS=',' read -ra new_groups <<< "$new_extra"
-        for g in "${new_groups[@]}"; do
-          g=$(echo "$g" | xargs)
-          sudo gpasswd -a "$user" "$g" || return 1
-        done
-      fi
-
-      registrar_usuario_catalogo "$user" || return 1
-      info "Grupos actualizados"
+    4)
+      prim_grupo=$(id -gn "$user") || return 1
+      usuario_perfil_samba "$user" "$prim_grupo" || return 1
       ;;
   esac
 }

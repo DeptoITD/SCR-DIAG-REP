@@ -119,3 +119,15 @@ El resultado `[COINCIDE]` confirma que la contraseña del CSV coincide con la gu
 - [Samba: net groupmap](https://www.samba.org/samba/docs/4.15/man-html/net.8.html).
 - [Samba: pdbedit](https://www.samba.org/samba/docs/4.8/man-html/pdbedit.8.html).
 - [Bitácora](../../../BITACORA.md).
+
+## Grupo único y perfil Samba desde Gestión de usuarios
+
+Ejecuta `sudo bash src/script.sh usuarios`. Crear usuario asigna únicamente el grupo primario seleccionado, sin grupos adicionales, home ni consola.
+
+En Editar usuario, opción 3 selecciona el grupo único y aplica `/nonexistent` y `nologin`; opción 4 aplica el mismo perfil usando el grupo primario actual. Se muestra el cambio y se confirma antes de retirar todas las membresías adicionales. Las contraseñas Samba no se cambian por esta operación.
+
+Una carpeta antigua `/home/usuario` se traslada a `logs/perfil-samba.*/home` con respaldo privado de los registros Linux. No se elimina su contenido ni se libera ese espacio de disco. Se rechazan enlaces, rutas personales no estándar y montajes. Las cuentas soporte, sara.albarracin y juan.rojas están protegidas de esta conversión.
+
+El grupo privado antiguo no se elimina automáticamente porque puede existir como propietario de archivos o ACL en otros sitios. Puede permanecer como grupo sin pertenencias; `id usuario` debe mostrar únicamente el grupo asignado.
+
+Este perfil se aplica desde la gestión manual. La importación y la carga CSV conservan home y shell de cuentas existentes; las nuevas se crean sin home y con nologin.
