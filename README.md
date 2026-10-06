@@ -1,192 +1,101 @@
 # SCR-DIAG-REP
-**Categoría:** Script | **Versión:** 0.7 | **Fecha:** 2026-10-02 | **Depto:** IT+D  
-**Plataforma:** Linux (bash) | **Requisito:** `bash 4.0+`, `sudo`, Samba, `pdbedit`
+**Categoría:** Script
+**Fecha de actualización:** 2026-10-06
+**Departamento:** IT+D
 
 ## Propósito
-Replicar **identidades Linux + credenciales Samba** entre equipos de forma segura y auditable.
-- Carga masiva usuarios desde CSV
-- Exportación completa (usuarios, grupos, credenciales)
-- Importación inteligente (análisis SID, sincronización, dry-run)
-- Migración bidireccional segura (SERVER ↔ NAS)
+Gestionar usuarios y grupos de trabajo para Samba; cargar credenciales desde CSV y exportar/importar identidades entre servidor y NAS.
 
-**Flujo Simple:**
-```
-1. EQUIPO A (Origen)
-   └─ bash menu.sh → 2: Exportar
-      └─ Genera: src/export/export_hostname_timestamp/
-         └─ Muestra instrucciones: qué copiar + qué correr en otro equipo
+## Descripción técnica
+Bash 4 o superior sobre Linux, con sudo, herramientas de usuarios/grupos, Samba (`net`, `pdbedit`, `smbpasswd`) y systemd para restaurar bases Samba. El repositorio calcula sus rutas desde su ubicación: no exige estar instalado en `/opt/scripts`.
 
-2. COPIA MANUAL (USB, SCP, Samba, etc.)
-   └─ Copia carpeta export_* a otro equipo
-      └─ En: /opt/scripts/SCR-DIAG-REP/src/export/
+Las altas nuevas se crean sin carpeta personal ni consola (`/nonexistent`, `nologin`). La carga masiva usa contraseñas permanentes del CSV. Los grupos de trabajo `IND_*`, `COR`, `OPE`, `COM` y `GEN` se vinculan con Samba y se registran en el catálogo.
 
-3. EQUIPO B (Destino)
-   └─ bash menu.sh → 3: Importar
-      └─ Selecciona export_* 
-      └─ Crea usuarios, grupos, Samba locales
+## Instrucciones de uso
+
+```bash
+cd /opt/scripts/SCR-DIAG-REP
+sudo bash src/script.sh
 ```
 
-**Integración con SCR-ACL-REP:**
-- **SCR-DIAG-REP:** Exportar identidades + crear en destino
-- **SCR-ACL-REP:** Configurar ACLs, perfiles, especialidades (después de este repo)
-- **Entrada ACL-REP:** `src/export/usuarios.db`, `src/export/equipos.db`
+1. Diagnóstico.
+2. Exportar configuración.
+3. Importar una exportación.
+4. Gestión de exportaciones.
+5. Gestión de equipos/grupos de trabajo.
+6. Gestión de usuarios, incluida carga masiva.
+7. Salir.
 
-## Archivos Exportados
-- `srv2_passwd.txt` — Usuarios Linux (uid, gid, home, shell)
-- `srv2_group.txt` — Grupos Linux
-- `srv2_samba_users.txt` — Usuarios Samba (pdbedit -L)
-- `srv2_testparm.conf` — Config Samba (testparm -s)
-- `srv2_smbconf.txt` — Backup smb.conf
-- `srv2_fstab.txt` — Mounts persistentes
+`src/menu.sh` y `src/main.sh` conservan acceso al mismo menú. No hay scripts de pruebas en el flujo funcional.
 
-## Estructura
+Carga CSV: menú 6 → 5 → 1, formato UTF-8:
+
+```text
+usuario|nombre|grupo|dominio|uid|password
 ```
+
+UID vacío permite asignación automática. Los usuarios existentes se omiten; sus credenciales no se cambian. El dominio es referencia de auditoría. Las importaciones preservan respaldos en `logs/importacion.*` y no anuncian éxito si falla un componente. Restaurar bases Samba completas sustituye sus credenciales: revisar antes de confirmar.
+
+## Diagrama de secuencia (Entradas y Salidas)
+
+```text
+[Menú / CSV / carpeta exportada]
+              ↓
+[src/script.sh → menú → módulo seleccionado]
+              ↓
+[Identidades Linux + Samba / src/config/data / src/export / logs]
+```
+
+## Estructura del repositorio
+
+```text
 SCR-DIAG-REP/
-├── config/
-│   └── servers.env          ← Configuración IPs, rutas, credenciales
 ├── src/
-│   ├── scripts/
-│   │   ├── 10_exportar_identidades.sh      ← Exporta del servidor
-│   │   ├── 20_crear_identidades_nas.sh     ← Crea en NAS
-│   │   ├── 30_crear_acls.sh                ← Configura permisos
-│   │   └── RUNME.sh                        ← Orquestador maestro
-│   ├── export/              ← Archivos exportados (srv2_*.txt)
-│   └── utils.sh             ← Funciones compartidas
-├── logs/                    ← Registros ejecución
-├── BITACORA.md              ← Histórico cambios
+│   ├── script.sh          ← Entrada principal
+│   ├── menu.sh            ← Menú común
+│   ├── main.sh            ← Acceso compatible
+│   ├── iniciar.sh         ← Rutas, catálogos y registro
+│   ├── utils.sh           ← Funciones compartidas
+│   ├── modules/           ← Operaciones funcionales
+│   ├── config/
+│   │   ├── servers.env    ← Rutas relativas al repositorio
+│   │   ├── defaults/      ← Catálogos iniciales versionados
+│   │   └── data/          ← Catálogos locales, fuera de Git
+│   ├── export/            ← Exportaciones locales, fuera de Git
+│   ├── docs/              ← Wiki, guías e historial
+│   ├── examples/          ← Ejemplos de entrada
+│   └── legacy/            ← Código anterior, no cargado por el menú
+├── logs/                  ← Registros y respaldos, fuera de Git
+├── BITACORA.md
 └── README.md
 ```
 
-## Instalación Rápida
+El arranque crea los directorios de ejecución y `logs/ejecucion.log`. Solo inicializa catálogos cuando no existen; conserva los existentes. Para una instalación anterior puede copiar `config/data/*.db` al nuevo directorio. Las actualizaciones futuras no versionan los catálogos de cada equipo.
 
-### Cualquier Equipo (igual proceso)
-```bash
-cd /opt/scripts
-git clone https://github.com/DeptoITD/SCR-DIAG-REP.git
-cd SCR-DIAG-REP
+## Actualizar un NAS con la estructura anterior
 
-# Listo. No necesitas editar servers.env si usas /opt/scripts/SCR-DIAG-REP
-bash menu.sh
-```
-
-**Eso es todo.** El repo es agnóstico y funciona en cualquier máquina.
-
-## Uso (Menú Interactivo)
+Antes del primer pull de esta reorganización, respaldar los catálogos locales. Si Git tiene cambios en esos archivos, guardarlos antes de descargar los cambios; no sobrescribirlos con los ejemplos.
 
 ```bash
-bash menu.sh
+cd /opt/scripts/SCR-DIAG-REP
+respaldo="$HOME/SCR-DIAG-REP-config-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$respaldo"
+sudo cp -a config/data "$respaldo/data"
+git stash push -m "Catalogos anteriores antes de reorganizar" -- config/data/usuarios.db config/data/equipos.db
+git pull --ff-only origin main
+sudo mkdir -p src/config/data
+sudo cp -a "$respaldo/data/." src/config/data/
+sudo bash src/script.sh
 ```
 
-### 1. Diagnóstico
-```
-→ 1: Diagnóstico de equipo
-```
-Recolecta (solo lectura): sistema, servicios, usuarios, grupos, Samba, discos, RAID, LVM, mounts, ACLs, fstab.
+Ejecutar cada comando solo si el anterior termina correctamente. No aplicar `git stash pop` sobre las rutas antiguas: la copia respaldada ya quedó en las rutas nuevas. Esta migración no recrea cuentas Linux/Samba ni cambia contraseñas.
 
-### 2. Exportar
-```
-→ 2: Exportar configuración
-```
-Genera: `src/export/export_hostname_YYYYMMDD_HHMMSS/`
+Si el equipo ya tiene la nueva estructura, basta `git pull --ff-only origin main` y `sudo bash src/script.sh`.
 
-**Al terminar muestra:**
-- Dónde está la carpeta
-- Cómo copiarla a otro equipo (SCP o manual)
-- Qué comando correr en el otro equipo para importar
+## Documentación
 
-### 3. Importar
-```
-→ 3: Importar configuración
-```
-- Busca carpetas en `src/export/`
-- Selecciona una
-- Crea usuarios, grupos, Samba locales
+- [Wiki](src/docs/wiki/INICIO.md).
+- [Carga masiva y grupos Samba](src/docs/CARGA_MASIVA.md).
+- [Bitácora](BITACORA.md).
 
-### 4. Gestión de Exportaciones
-```
-→ 4: Gestión de exportaciones
-   → 1: Listar disponibles
-   → 2: Limpiar antiguas (>30 días)
-```
-
-## Configuración (servers.env)
-
-**Mínima (por defecto, funciona así):**
-```bash
-REPO_PATH="/opt/scripts/SCR-DIAG-REP"
-EXPORT_PATH="${REPO_PATH}/src/export"
-LOG_DIR="${REPO_PATH}/logs"
-DATA_DIR="${REPO_PATH}/config/data"
-```
-
-No necesitas IPs, SSH, ni permisos especiales.  
-**Si clonas en otro path:** actualiza `REPO_PATH` en servers.env.
-
-## Logs & Monitoreo
-
-**Ubicación:** `logs/script_YYYYMMDD_HHMMSS.log`
-
-**Ver en tiempo real:**
-```bash
-tail -f logs/script_*.log
-```
-
-**Buscar eventos específicos:**
-```bash
-grep "Usuario creado" logs/script_*.log        # Usuarios agregados
-grep "Grupo creado" logs/script_*.log          # Grupos agregados
-grep "ERROR\|error" logs/script_*.log          # Errores
-grep "Samba" logs/script_*.log                 # Operaciones Samba
-```
-
-**Estadísticas rápidas:**
-```bash
-wc -l logs/script_*.log                        # Líneas de log
-grep -c "Usuario creado" logs/script_*.log     # Total usuarios creados
-grep -c "\[ERROR\]" logs/script_*.log          # Total errores
-```
-
-**Último log completo:**
-```bash
-cat logs/$(ls -t logs/script_*.log | head -1)
-```
-
-**Ver detalles:** Ver `WIKI.md` para guía completa de troubleshooting.
-
-## Troubleshooting
-
-| Problema | Causa | Solución |
-|----------|-------|----------|
-| `Permission denied` en export | Permisos en `src/export/` | `sudo chown -R $USER: src/export` |
-| Usuario/Grupo duplicado | Ya existe en sistema | Script detecta y salta. Revisar logs |
-| Archivo export vacío | `usuarios.db` no existe | Crear primero en Gestión de usuarios (opción 6) |
-| Importar muestra (vacío) | Sin carpetas en `src/export/` | Ejecutar Exportar primero (opción 2) |
-
-**Ver logs:**
-```bash
-tail -50 logs/*.log
-```
-
-### ACLs y Permisos
-**No aplicar aquí.** Usar repo `SCR-ACL-REP` después:
-- Define ACLs por proyecto/especialidad
-- Aplica setfacl por usuario/grupo
-- Gestiona inheritance y masks
-
----
-
-## Integración con SCR-ACL-REP
-
-Después de replicar identidades aquí, usa `SCR-ACL-REP` para:
-1. Configurar perfiles y especialidades
-2. Aplicar ACLs por proyecto
-3. Auditoría de accesos
-
-**Entrada SCR-ACL-REP:**
-- `src/export/usuarios.db`
-- `src/export/equipos.db`
-
-**Ver:** `INTEGRACION.md` para detalles técnicos.
-
----
-**Autor:** IT+D | **Última actualización:** 2026-09-30
+El verificador de credenciales es una descarga independiente, ejecutada desde Downloads; no es parte del repositorio. Los archivos de entrada con contraseñas se mantienen fuera de Git.

@@ -13,3 +13,9 @@ Thumbs.db
 *.key
 secrets.json
 site_config.json
+# Datos de ejecución y copias generadas: no son código del repositorio.
+/src/config/data/
+/src/export/
+.claude/
+*.bak
+*.db.bak*

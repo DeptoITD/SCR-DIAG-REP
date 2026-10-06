@@ -2,9 +2,8 @@
 # exportar.sh — Exportación Completa (Identidades Linux + Samba)
 # Genera export portable con usuarios, grupos, credenciales Samba
 
-if [[ "$(type -t log)" != "function" ]]; then
-  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || source "$(dirname "$0")/../config/servers.env"
-  source "${REPO_PATH:-$(dirname "$0")/..}/src/utils.sh" 2>/dev/null || source "$(dirname "$0")/../utils.sh"
+if [[ "$(type -t log)" != function ]]; then
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/iniciar.sh" || return 1
 fi
 
 exportar_run() {

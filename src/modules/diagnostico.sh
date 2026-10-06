@@ -2,9 +2,8 @@
 # diagnostico.sh — Diagnóstico de máquina (console-only por defecto)
 
 # utils.sh + servers.env already sourced by menu.sh, but allow standalone calls
-if [[ "$(type -t log)" != "function" ]]; then
-  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || source "$(dirname "$0")/../config/servers.env"
-  source "${REPO_PATH:-$(dirname "$0")/..}/src/utils.sh" 2>/dev/null || source "$(dirname "$0")/../utils.sh"
+if [[ "$(type -t log)" != function ]]; then
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/iniciar.sh" || return 1
 fi
 
 diagnostico_run() {

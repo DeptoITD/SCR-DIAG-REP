@@ -1,12 +1,12 @@
 # SCR-DIAG-REP — Guía de uso
 
-Actualizado: 2026-10-05.
+Actualizado: 2026-10-06.
 
 ## Entrada y menú vigente
 
 ```bash
 cd /opt/scripts/SCR-DIAG-REP
-sudo bash src/menu.sh
+sudo bash src/script.sh
 ```
 
 1. Diagnóstico de equipo.
@@ -17,7 +17,7 @@ sudo bash src/menu.sh
 6. Gestión de usuarios; incluye carga masiva.
 7. Salir.
 
-Esta guía corresponde a `src/menu.sh` y `src/modules/`. No usar `src/main.sh` como sustituto: es otro dispatcher y no corresponde a los menús de esta guía.
+Esta guía corresponde a `src/menu.sh` y `src/modules/`. `src/main.sh` y `src/menu.sh` son accesos compatibles al mismo flujo; la entrada principal es `src/script.sh`.
 
 ## Grupos Linux, de sistema y de trabajo Samba
 
@@ -47,8 +47,8 @@ Las filas personalizadas con descripción distinta de `Grupo Linux` se conservan
 | Linux/NSS, normalmente `/etc/passwd` | Usuario y GID primario, home y shell | `getent passwd USUARIO` |
 | Base de vínculos Samba, según su backend/configuración | Grupo Windows/SID vinculado al grupo Linux | `sudo net groupmap list` |
 | Base de cuentas Samba, según su backend/configuración | Credenciales y propiedades Samba | `sudo pdbedit -L` |
-| `config/data/equipos.db` | `grupo|display|gid|descripcion|fecha` | Menú 5 → 1 |
-| `config/data/usuarios.db` | Usuario, nombre, grupo primario, extras, UID y fecha | Menú 6 → 1 |
+| `src/config/data/equipos.db` | `grupo|display|gid|descripcion|fecha` | Menú 5 → 1 |
+| `src/config/data/usuarios.db` | Usuario, nombre, grupo primario, extras, UID y fecha | Menú 6 → 1 |
 | `src/export/usuarios_entrada.csv` | Resultado de la última carga, sin contraseñas | Carga masiva → 2 |
 | `src/export/export_HOST_FECHA/grupos_linux.txt` | Grupos del origen, incluidos grupos de sistema | Exportación → archivo |
 
@@ -76,7 +76,7 @@ Estas son las descripciones del catálogo inicial y las observadas en el NAS. Lo
 ```bash
 cd /opt/scripts/SCR-DIAG-REP
 git pull --ff-only origin main
-sudo bash src/menu.sh
+sudo bash src/script.sh
 ```
 
 Selecciona 5 → 1. La sincronización registra los grupos de trabajo que ya existen en Linux y crea sus vínculos Samba si faltan, sin duplicarlos. Si Samba rechaza el registro, el programa informa el error; no asumir que todos están vinculados sin verificar:
@@ -101,7 +101,7 @@ La carga crea grupos de trabajo faltantes en Linux, registra el vínculo Samba y
 
 No hay opción de recuperación ni script de conversión: fueron retirados tras la corrección. Las carpetas antiguas no se borran automáticamente.
 
-Ver [detalle de carga masiva](../docs/CARGA_MASIVA.md). El CSV de entrada contiene contraseñas: mantener permisos restringidos. Las auditorías nuevas no las incluyen.
+Ver [detalle de carga masiva](../CARGA_MASIVA.md). El CSV de entrada contiene contraseñas: mantener permisos restringidos. Las auditorías nuevas no las incluyen.
 
 ## Exportación e importación
 
@@ -123,10 +123,10 @@ Descargar la utilidad independiente `verificar_credenciales_csv.sh` y copiarla a
 sudo bash /home/soporte/Downloads/verificar_credenciales_csv.sh /home/soporte/Downloads/usuarios_contrasenas_permanentes.csv
 ```
 
-El resultado `[COINCIDE]` confirma que la contraseña del CSV coincide con la guardada en Samba y que no hay indicadores de bloqueo/deshabilitación. No muestra secretos ni modifica cuentas. No sustituye una prueba de permisos de carpetas. Ver [comprobación y formato Bitwarden](../docs/CARGA_MASIVA.md).
+El resultado `[COINCIDE]` confirma que la contraseña del CSV coincide con la guardada en Samba y que no hay indicadores de bloqueo/deshabilitación. No muestra secretos ni modifica cuentas. No sustituye una prueba de permisos de carpetas. Ver [comprobación y formato Bitwarden](../CARGA_MASIVA.md).
 
 ## Referencias
 
 - [Samba: net groupmap](https://www.samba.org/samba/docs/4.15/man-html/net.8.html).
 - [Samba: pdbedit](https://www.samba.org/samba/docs/4.8/man-html/pdbedit.8.html).
-- [Bitácora](../BITACORA.md).
+- [Bitácora](../../../BITACORA.md).

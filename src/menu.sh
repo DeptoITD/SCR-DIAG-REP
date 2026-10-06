@@ -4,13 +4,9 @@
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export REPO_PATH="$(dirname "$SCRIPT_DIR")"
-export CONFIG_DIR="${REPO_PATH}/config"
-
-# Sourcing
-source "${REPO_PATH}/config/servers.env"
-mkdir -p "${LOG_DIR}" "${DATA_DIR}" "${EXPORT_PATH}" 2>/dev/null
-source "${SCRIPT_DIR}/utils.sh"
+source "$SCRIPT_DIR/iniciar.sh" || exit 1
+log 'Inicio del menú SCR-DIAG-REP' >/dev/null
+trap 'printf "[%s] Error de ejecución: código %s, línea %s\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$?" "$LINENO" >> "$LOG_FILE"' ERR
 source "${SCRIPT_DIR}/modules/diagnostico.sh"
 source "${SCRIPT_DIR}/modules/exportar.sh"
 source "${SCRIPT_DIR}/modules/importar.sh"
@@ -23,7 +19,7 @@ main_menu() {
   while true; do
     echo ""
     echo "╔════════════════════════════════════════╗"
-    echo "║     SCR-DIAG-REP v0.5                  ║"
+    echo "║     SCR-DIAG-REP v0.8                  ║"
     echo "║  Exportar → Copiar → Importar          ║"
     echo "╚════════════════════════════════════════╝"
     echo ""
@@ -35,7 +31,7 @@ main_menu() {
     echo "6. Gestión de usuarios"
     echo "7. Salir"
     echo ""
-    read -r -p "Seleccione una opción: " opt
+    read -r -p "Seleccione una opción: " opt || return 0
 
     case "$opt" in
       1) diagnostico_run ;;
@@ -44,7 +40,7 @@ main_menu() {
       4) menu_sync ;;
       5) menu_equipos ;;
       6) menu_usuarios ;;
-      7) echo "Hasta luego."; exit 0 ;;
+      7) log 'Salida del menú' >/dev/null; echo "Hasta luego."; exit 0 ;;
       *) echo "[!] Opción inválida" ;;
     esac
   done

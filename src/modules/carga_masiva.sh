@@ -1,8 +1,7 @@
 #!/bin/bash
 # Importa cuentas nuevas; nunca imprime ni guarda contraseñas en auditorías.
 if [[ "$(type -t log)" != function ]]; then
-  source "${REPO_PATH:-$(dirname "$0")/..}/config/servers.env" 2>/dev/null || return 1
-  source "${REPO_PATH}/src/utils.sh"
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/iniciar.sh" || return 1
 fi
 leer_csv() {
   local archivo="$1" linea numero=0 usuario nombre grupo dominio uid password mensaje separadores
