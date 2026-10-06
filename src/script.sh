@@ -12,6 +12,7 @@ Flujo de migración: exportar en servidor → copiar carpeta → importar en NAS
   carga-masiva [CSV]          Crear o sincronizar contraseñas desde CSV
   listar-usuarios             Consultar usuarios
   listar-grupos               Sincronizar y consultar grupos de trabajo
+  limpiar-homes               Eliminar homes iniciales de cuentas Samba
   usuarios                    Administrar usuarios
   equipos                     Administrar equipos e integrantes
   exportaciones               Administrar exportaciones
@@ -22,7 +23,7 @@ AYUDA
 accion="${1:-ayuda}"
 case "$accion" in
   ayuda|-h|--help) uso; exit 0 ;;
-  diagnostico|exportar|importar|carga-masiva|listar-usuarios|listar-grupos|usuarios|equipos|exportaciones) ;;
+  diagnostico|exportar|importar|carga-masiva|listar-usuarios|listar-grupos|usuarios|equipos|exportaciones|limpiar-homes) ;;
   *) echo "Acción desconocida: $accion" >&2; uso >&2; exit 2 ;;
 esac
 shift
@@ -44,6 +45,7 @@ case "$accion" in
   carga-masiva) carga_masiva_workflow "$@" ;;
   listar-usuarios) usuario_listar ;;
   listar-grupos) equipo_listar ;;
+  limpiar-homes) usuarios_limpiar_homes ;;
   usuarios) menu_usuarios ;;
   equipos) menu_equipos ;;
   exportaciones) menu_sync ;;

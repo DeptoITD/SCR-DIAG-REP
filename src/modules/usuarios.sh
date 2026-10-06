@@ -22,6 +22,67 @@ usuario_listar() {
   echo ""
 }
 
+# Solo permite eliminar archivos idénticos al esqueleto inicial y carpetas vacías.
+home_solo_inicial() {
+  local ruta="$1" skel="${2:-/etc/skel}" item relativo
+  [[ -d "$ruta" && ! -L "$ruta" && -d "$skel" ]] || return 1
+  while IFS= read -r -d '' item; do
+    relativo="${item#"$ruta"/}"
+    [[ ! -L "$item" ]] || return 1
+    if [[ -f "$item" ]]; then
+      [[ -f "$skel/$relativo" && ! -L "$skel/$relativo" ]] || return 1
+      cmp -s -- "$item" "$skel/$relativo" || return 1
+    elif [[ -d "$item" ]]; then
+      [[ -d "$skel/$relativo" && ! -L "$skel/$relativo" ]] || return 1
+    else return 1; fi
+  done < <(find "$ruta" -mindepth 1 -print0)
+}
+
+home_ruta_segura() {
+  local user="$1" ruta="/home/$1" mounts
+  [[ "$user" =~ ^[a-z_][a-z0-9._-]*$ && -d "$ruta" && ! -L "$ruta" ]] || return 1
+  [[ "$(realpath "$ruta")" == "$ruta" ]] || return 1
+  mounts=$(findmnt -rn -o TARGET) || return 1
+  ! printf '%s\n' "$mounts" | awk -v p="$ruta" '$0==p || index($0,p"/")==1 {found=1} END {exit !found}' || return 1
+  home_solo_inicial "$ruta"
+}
+
+usuarios_limpiar_homes() {
+  require_root
+  local ruta user registro uid home respaldo fallos=0
+  local -a candidatos=()
+  for ruta in /home/*; do
+    [[ -d "$ruta" || -L "$ruta" ]] || continue
+    user="${ruta##*/}"
+    case "$user" in soporte|sara.albarracin|juan.rojas) echo "[PROTEGIDO] $user"; continue ;; esac
+    registro=$(getent passwd "$user") || continue
+    IFS=: read -r _ _ uid _ _ home _ <<< "$registro"
+    [[ "$uid" =~ ^[0-9]+$ ]] && ((uid>=1000 && uid<65534)) || continue
+    [[ "$home" == "$ruta" || "$home" == /nonexistent ]] || continue
+    pdbedit -L -u "$user" | awk -F: -v u="$user" '$1==u {found=1} END {exit !found}' || continue
+    if home_ruta_segura "$user"; then
+      candidatos+=("$user"); echo "[ELIMINAR HOME INICIAL] $ruta"
+    else echo "[CONSERVADO] $ruta: contenido distinto, enlace o montaje; requiere revisión."; fi
+  done
+  ((${#candidatos[@]})) || { echo 'No hay homes iniciales elegibles.'; return 0; }
+  confirm "¿Eliminar definitivamente ${#candidatos[@]} homes iniciales y poner sus cuentas sin consola? No cambia grupos ni contraseñas." || return 0
+  respaldo=$(mktemp -d "$LOG_DIR/limpieza-homes.XXXXXX") || return 1
+  chmod 700 "$respaldo" || return 1
+  cp -p /etc/passwd /etc/group /etc/shadow "$respaldo/" || return 1
+  chmod 600 "$respaldo/"* || return 1
+  for user in "${candidatos[@]}"; do
+    # Revalidar antes de eliminar: no usar una comprobación antigua.
+    if ! home_ruta_segura "$user"; then echo "[CONSERVADO] $user: la carpeta cambió."; fallos=$((fallos+1)); continue; fi
+    if ! usermod -d /nonexistent -s /usr/sbin/nologin "$user" ||
+       ! find "/home/$user" -xdev -depth -delete ||
+       ! registrar_usuario_catalogo "$user"; then
+      echo "[ERROR] $user: puede haber cambios parciales." >&2; fallos=$((fallos+1)); continue
+    fi
+    echo "[LIMPIADO] $user: sin home ni consola; grupos y credenciales conservados."
+  done
+  echo "Registros Linux anteriores: $respaldo. Incidencias: $fallos"
+  ((fallos==0))
+}
 # Perfil para cuentas de trabajo; mantiene intactas las cuentas administrativas.
 usuario_perfil_samba() {
   local user="$1" grupo="$2" registro uid home shell respaldo ruta mounts
@@ -48,11 +109,14 @@ usuario_perfil_samba() {
       echo '[!] Home contiene un montaje; no se modifica.' >&2; return 1
     fi
   fi
+  if [[ -d "$ruta" ]] && ! home_solo_inicial "$ruta"; then
+    echo '[!] Home contiene archivos modificados o personales; se conserva y no se aplica el perfil.' >&2; return 1
+  fi
   asegurar_grupo_samba "$grupo" || return 1
   registrar_grupo_catalogo "$grupo" || return 1
   echo "Perfil de $user: grupo único $grupo, /nonexistent y nologin."
-  [[ ! -d "$ruta" ]] || echo "Su carpeta $ruta se trasladará a un respaldo privado en logs; no se borran archivos."
-  confirm '¿Aplicar este perfil y retirar los grupos adicionales?' || return 0
+  [[ ! -d "$ruta" ]] || echo "Se eliminará definitivamente $ruta: solo contiene archivos iniciales iguales a /etc/skel."
+  confirm '¿Aplicar el perfil, retirar grupos adicionales y eliminar el home inicial si existe?' || return 0
   respaldo=$(mktemp -d "$LOG_DIR/perfil-samba.XXXXXX") || return 1
   chmod 700 "$respaldo" || return 1
   cp -p /etc/passwd /etc/group /etc/shadow "$respaldo/" || return 1
@@ -60,8 +124,8 @@ usuario_perfil_samba() {
   printf '%s\n' "$registro" > "$respaldo/usuario-antes.txt" || return 1
   sudo usermod -g "$grupo" -G '' -d /nonexistent -s /usr/sbin/nologin "$user" || return 1
   if [[ -d "$ruta" ]]; then
-    sudo mv -- "$ruta" "$respaldo/home" || {
-      echo "[!] Perfil cambiado; no se pudo respaldar el home. Revisa $ruta y $respaldo." >&2; return 1;
+    home_ruta_segura "$user" && sudo find "$ruta" -xdev -depth -delete || {
+      echo "[!] Perfil cambiado; no se pudo eliminar el home inicial. Revisa $ruta y $respaldo." >&2; return 1;
     }
   fi
   registrar_usuario_catalogo "$user" || return 1
