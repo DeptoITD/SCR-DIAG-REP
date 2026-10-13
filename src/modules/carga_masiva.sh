@@ -73,12 +73,26 @@ leer_csv() {
   done
 }
 
+# Concilia el grupo primario sin borrar perfiles secundarios existentes.
+carga_asignar_grupo() {
+  local usuario="$1" grupo="$2" actual
+  getent group "$grupo" >/dev/null || return 1
+  actual=$(id -gn "$usuario") || return 1
+  if [[ "$actual" != "$grupo" ]]; then
+    usermod -g "$grupo" "$usuario" || return 1
+  fi
+  [[ "$(id -gn "$usuario")" == "$grupo" ]] || {
+    echo "[!] $usuario: el grupo primario no coincide con $grupo" >&2
+    return 1
+  }
+}
+
 aplicar_carga_masiva() {
   require_root
   local linea usuario nombre grupo dominio uid password comando estado esperado
   local creados=0 actualizados=0 fallidos=0
   local -a opciones
-  for comando in useradd groupadd chpasswd chage smbpasswd pdbedit getent net openssl iconv; do
+  for comando in useradd usermod id groupadd chpasswd chage smbpasswd pdbedit getent net openssl iconv; do
     command -v "$comando" >/dev/null || { echo "[!] Falta $comando" >&2; return 1; }
   done
   # Comprueba soporte MD4 antes de crear o actualizar cuentas.
@@ -87,6 +101,8 @@ aplicar_carga_masiva() {
   respaldo=$(mktemp -d "$LOG_DIR/carga.XXXXXX") || return 1
   chmod 700 "$respaldo" || return 1
   pdbedit -e "tdbsam:$respaldo/cuentas-antes.tdb" > "$respaldo/respaldo.log" 2>&1 || return 1
+  getent passwd > "$respaldo/passwd-antes" || return 1
+  getent group > "$respaldo/group-antes" || return 1
   cp -p /etc/shadow "$respaldo/shadow-antes" || return 1
   chmod 600 "$respaldo/shadow-antes" || return 1
   auditoria="$EXPORT_PATH/usuarios_entrada.csv"
@@ -103,7 +119,9 @@ aplicar_carga_masiva() {
       if useradd "${opciones[@]}" "$usuario"; then estado=CREADO; else estado=ERROR_CREACION; fi
     fi
     if [[ "$estado" != ERROR_* ]]; then
-      if ! establecer_password_permanente "$usuario" "$password"; then
+      if ! carga_asignar_grupo "$usuario" "$grupo"; then
+        estado=ERROR_GRUPO
+      elif ! establecer_password_permanente "$usuario" "$password"; then
         estado=ERROR_CREDENCIAL
       elif ! registrar_usuario_catalogo "$usuario"; then estado=ERROR_REGISTRO; fi
     fi
@@ -125,14 +143,14 @@ carga_masiva_workflow() {
   echo 'Formato: usuario|nombre|grupo|dominio|uid|password'
   echo 'El UID puede quedar vacío. Las contraseñas se usan tal cual, sin vencimiento.'
   echo 'Los grupos de trabajo faltantes se crean y registran en Samba. El dominio es una referencia.'
-  echo 'Las cuentas existentes reciben la contraseña del CSV; se conservan home, shell y grupos actuales.'
+  echo 'Las cuentas existentes reciben la contraseña del CSV; se aplica y verifica el grupo primario del CSV; se conservan home, shell y grupos secundarios.'
   echo 'Las cuentas nuevas son solo para Samba: sin carpeta personal ni consola/SSH.'
   if [[ -z "$archivo" ]]; then
     read -r -p 'Ruta del archivo CSV: ' archivo || return 1
   fi
   archivo="${archivo/#\~/$HOME}"
   leer_csv "$archivo" || return 1
-  if confirm "¿Aplicar las contraseñas del CSV a ${#USUARIOS_LEIDOS[@]} cuentas, incluidas las existentes?"; then
+  if confirm "¿Aplicar grupos primarios y contraseñas del CSV a ${#USUARIOS_LEIDOS[@]} cuentas, incluidas las existentes?"; then
     aplicar_carga_masiva
     resultado=$?
     USUARIOS_LEIDOS=()

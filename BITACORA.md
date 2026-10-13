@@ -20,3 +20,11 @@ El historial narrativo anterior se conserva en [src/docs/historico/BITACORA_2026
 | v1.0 | 2026-10-06 | IT+D | Limpieza | Limpieza confirmada de homes Samba idénticos a /etc/skel para liberar espacio; conserva archivos personales, montajes, enlaces y cuentas administrativas; perfil manual deja de mover homes a logs |
 | v1.0 | 2026-10-06 | IT+D | Corrección | La limpieza acepta enlaces iniciales como .face.icon idénticos a /etc/skel; compara sus destinos literales y borra sin seguir enlaces |
 | v1.1 | 2026-10-06 | IT+D | Samba | Exporta smb.conf efectivo y original; importa recursos con rutas del destino, conserva global y recursos exclusivos, valida con testparm y restaura configuración si falla la recarga |
+
+
+## 2026-10-13 — Conciliacion del grupo primario en carga masiva
+
+Se corrige la carga de cuentas existentes para aplicar/verificar el grupo del
+CSV. Se registran fallos de grupo, se conservan secundarios y se respalda el
+listado previo de identidades. El alta individual comprueba el grupo creado.
+Maria Cuevas pasa a IND_BIM en catalogos; requiere aplicar en la NAS.

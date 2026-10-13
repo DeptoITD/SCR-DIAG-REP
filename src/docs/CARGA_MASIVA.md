@@ -12,7 +12,7 @@ usuario|nombre|grupo|dominio|uid|password
 - `password` es la contraseña definitiva: se conserva exactamente, incluidos espacios. No admite `|`, `:`, saltos de línea ni valor vacío.
 - Los grupos de trabajo admitidos son `IND_*`, `COR`, `OPE`, `COM` y `GEN`. Si faltan, la carga crea su grupo Linux y lo registra en Samba con `net groupmap add`. El dominio del CSV es una referencia en la auditoría, no configura un dominio Samba ni agrega una membresía.
 - Se validan todas las filas antes de confirmar. Un error impide aplicar el archivo completo.
-Las cuentas existentes reciben la contraseña del CSV tras confirmar; no se cambia su home ni shell. soporte se excluye.
+Las cuentas existentes reciben el grupo primario y la contraseña del CSV tras confirmar. El grupo se verifica antes de actualizar credenciales y catálogo; no se cambia home, shell ni grupos secundarios. soporte se excluye.
 - Las nuevas cuentas de carga masiva, creación individual e importación se crean con `-M -d /nonexistent -s /usr/sbin/nologin`: sin carpeta personal y sin sesión de consola, shell SSH o SFTP. Los UID y grupos siguen disponibles para Samba.
 - Para cuentas nuevas se establece la misma contraseña en Linux y Samba. Linux no exige cambio al primer ingreso y no establece vencimiento; Samba recibe el indicador de contraseña sin vencimiento (`[X]`). El tipo de cuenta normal se establece al crear la cuenta y no se modifica con `pdbedit -c`.
 - La auditoría `src/export/usuarios_entrada.csv` y `src/config/data/usuarios.db` no contienen contraseñas. El resultado informa errores parciales: revisa esas cuentas antes de repetir la carga.
@@ -28,7 +28,7 @@ Referencia de los indicadores Samba: [pdbedit](https://www.samba.org/samba/docs/
 
 La carga masiva registra los grupos usados en `src/config/data/equipos.db`, incluso cuando el usuario ya existe. La importación registra cada grupo creado o encontrado, con el GID real del destino. Los nombres visibles, descripciones y fechas existentes se conservan; los grupos nuevos usan su nombre Linux como nombre visible.
 
-Las cuentas existentes reciben la contraseña del CSV tras confirmar; no se cambia su home ni shell. soporte se excluye.
+Las cuentas existentes reciben el grupo primario y la contraseña del CSV tras confirmar. El grupo se verifica antes de actualizar credenciales y catálogo; no se cambia home, shell ni grupos secundarios. soporte se excluye.
 
 En este servidor de Samba local, el grupo Linux sigue siendo necesario para permisos del sistema de archivos. El registro Samba lo vincula con una identidad Windows; no reemplaza el grupo Linux ni concede acceso a consola. Consulta los vínculos con `sudo net groupmap list`. Referencia: [net groupmap](https://www.samba.org/samba/docs/4.15/man-html/net.8.html).
 
@@ -60,3 +60,18 @@ Renombrar equipos actualiza el vínculo Samba por SID y las referencias del cat�
 
 ## Verificación integrada v1.0
 La carga aplica contraseñas permanentes y verifica el hash NT y el estado Samba de cada cuenta. Permite completar una cuenta Linux que aún no tenga credenciales Samba al repetir el mismo CSV. Actualiza el catálogo sin duplicados. Respalda la base Samba y shadow en `logs/carga.*` con permisos privados antes de aplicar. Un error se registra como fallo, conservando respaldos; no existe rollback automático de la carga.
+
+
+## Conciliacion de grupos (2026-10-13)
+
+La carga aplica el grupo primario del CSV tambien a cuentas existentes; no basta
+con actualizar su contraseña. Un fallo en usermod o una verificacion distinta
+registra ERROR_GRUPO y no anuncia esa cuenta como actualizada. Los snapshots
+passwd-antes y group-antes conservan el estado previo en el respaldo privado.
+Los perfiles secundarios se conservan y deben revisarse si se solicita retirarlos.
+El catalogo se registra a partir del estado real tras la conciliacion.
+Maria Alejandra Cuevas tiene IND_BIM en el catalogo corregido. Actualizar el
+repositorio no cambia por si solo las cuentas de Linux de produccion.
+Para corregir una cuenta existente sin cambiar su contraseña ni repetir ACL,
+usar Gestion de usuarios → Editar → Grupo unico y perfil Samba en el equipo
+o aplicar el cambio primario autorizado y verificar con id.

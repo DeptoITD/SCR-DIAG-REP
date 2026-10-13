@@ -174,6 +174,7 @@ usuario_crear() {
   registrar_grupo_catalogo "$prim_grupo" || return 1
   # Crear usuario Linux
   sudo useradd -M -d /nonexistent -s /usr/sbin/nologin -g "$prim_grupo" -c "$full_name" "$user" || { error "Error creando usuario Linux"; return 1; }
+  [[ "$(id -gn "$user")" == "$prim_grupo" ]] || { error "Grupo primario incorrecto tras crear la cuenta"; return 1; }
   uid=$(id -u "$user") || return 1
 
   # Generar password
