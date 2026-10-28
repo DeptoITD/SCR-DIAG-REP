@@ -1,11 +1,11 @@
 #!/bin/bash
-# Única entrada: una acción explícita por ejecución.
+# Única entrada: una acción explícita por ejecución, o el menú principal sin argumentos en terminal.
 set -o pipefail
 uso() {
   cat <<'AYUDA'
-Uso: sudo bash src/script.sh ACCION [RUTA]
+Uso: sudo bash src/script.sh [ACCION [RUTA]]
 
-Flujo de migración: exportar en servidor → copiar carpeta → importar en NAS → verificar.
+Sin argumentos en terminal abre el menú principal. Flujo de migración: exportar en servidor → copiar carpeta → importar en NAS → verificar.
   diagnostico                 Diagnóstico del equipo
   exportar                    Generar carpeta exportada
   importar [CARPETA]          Validar e incorporar identidades y credenciales
@@ -20,10 +20,13 @@ Flujo de migración: exportar en servidor → copiar carpeta → importar en NAS
 Guía completa: src/docs/wiki/COMANDOS_RAPIDOS.md
 AYUDA
 }
-accion="${1:-ayuda}"
+accion="${1:-}"
+if [[ -z "$accion" ]]; then
+  if [[ -t 0 ]]; then accion=menu; else accion=ayuda; fi
+fi
 case "$accion" in
   ayuda|-h|--help) uso; exit 0 ;;
-  diagnostico|exportar|importar|carga-masiva|listar-usuarios|listar-grupos|usuarios|equipos|exportaciones|limpiar-homes) ;;
+  menu|diagnostico|exportar|importar|carga-masiva|listar-usuarios|listar-grupos|usuarios|equipos|exportaciones|limpiar-homes) ;;
   *) echo "Acción desconocida: $accion" >&2; uso >&2; exit 2 ;;
 esac
 shift
@@ -38,16 +41,53 @@ for modulo in diagnostico recursos_samba exportar importar sync equipos usuarios
 done
 log "Inicio de acción: $accion" >/dev/null
 trap 'printf "[%s] Error: código %s, línea %s\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$?" "$LINENO" >> "$LOG_FILE"' ERR
-case "$accion" in
-  diagnostico) diagnostico_run ;;
-  exportar) exportar_run ;;
-  importar) importar_run "$@" ;;
-  carga-masiva) carga_masiva_workflow "$@" ;;
-  listar-usuarios) usuario_listar ;;
-  listar-grupos) equipo_listar ;;
-  limpiar-homes) usuarios_limpiar_homes ;;
-  usuarios) menu_usuarios ;;
-  equipos) menu_equipos ;;
-  exportaciones) menu_sync ;;
-esac
+
+ejecutar_accion() {
+  local accion="$1"
+  shift
+  case "$accion" in
+    diagnostico) diagnostico_run ;;
+    exportar) exportar_run ;;
+    importar) importar_run "$@" ;;
+    carga-masiva) carga_masiva_workflow "$@" ;;
+    listar-usuarios) usuario_listar ;;
+    listar-grupos) equipo_listar ;;
+    limpiar-homes) usuarios_limpiar_homes ;;
+    usuarios) menu_usuarios ;;
+    equipos) menu_equipos ;;
+    exportaciones) menu_sync ;;
+  esac
+}
+
+menu_principal() {
+  local -a acciones=(diagnostico exportar importar carga-masiva listar-usuarios listar-grupos limpiar-homes usuarios equipos exportaciones)
+  local opt
+  while true; do
+    echo ""
+    echo "=== SCR-DIAG-REP ==="
+    echo "1. Diagnóstico del equipo"
+    echo "2. Exportar identidades"
+    echo "3. Importar identidades"
+    echo "4. Carga masiva de usuarios"
+    echo "5. Listar usuarios"
+    echo "6. Listar grupos de trabajo"
+    echo "7. Limpiar homes iniciales"
+    echo "8. Administrar usuarios"
+    echo "9. Administrar equipos"
+    echo "10. Administrar exportaciones"
+    echo "0. Salir"
+    read -r -p "Opción: " opt || return 0
+    case "$opt" in
+      0) return 0 ;;
+      [1-9]|10) ejecutar_accion "${acciones[$((opt-1))]}" || echo "[!] La acción terminó con error." >&2 ;;
+      *) error_soft "Opción inválida" ;;
+    esac
+  done
+}
+
+if [[ "$accion" == menu ]]; then
+  menu_principal
+else
+  ejecutar_accion "$accion" "$@"
+fi
 exit "$?"

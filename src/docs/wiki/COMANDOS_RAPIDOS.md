@@ -1,6 +1,6 @@
 # COMANDOS RÁPIDOS — Servidor y NAS
 Actualizado: 2026-10-06. Única entrada: `src/script.sh ACCION`.
-Sin argumentos muestra ayuda; cada acción termina al completarse. Los comandos `usuarios`, `equipos` y `exportaciones` abren únicamente su gestión específica.
+Sin argumentos abre el menú principal en terminal (fuera de terminal muestra ayuda); cada acción termina al completarse. Los comandos `usuarios`, `equipos` y `exportaciones` abren únicamente su gestión específica.
 
 ## 1. Preparar ambos equipos
 ```bash
