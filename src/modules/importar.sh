@@ -46,29 +46,30 @@ analizar_migracion() {
 }
 
 importar_usuarios_linux() {
-  local export_dir="$1" user uid gid nombre home shell grupo registro actual
-  local creados=0 existentes=0
+  local export_dir="$1" user uid gid nombre home shell grupo registro
+  local creados=0 omitidos=0
   [[ -f "$export_dir/usuarios_linux.txt" ]] || return 0
   [[ -f "$export_dir/grupos_linux.txt" ]] || { echo '[!] Faltan los grupos del origen.' >&2; return 1; }
+  : > "$BACKUP_IMPORTACION/usuarios-nuevos.txt" || return 1
   while IFS=: read -r user _ uid gid nombre home shell; do
     [[ "$uid" =~ ^[0-9]+$ ]] && ((uid >= 1000 && uid < 65534)) || continue
     case "$user" in soporte) echo "[CONSERVAR] $user"; continue ;; esac
+    # Las cuentas que ya existen en el destino no se modifican: ni clave, ni grupo, ni nombre.
+    if id "$user" >/dev/null 2>&1; then
+      echo "[OMITIDO] $user: ya existe en el destino; no se modifica."
+      omitidos=$((omitidos+1))
+      continue
+    fi
     grupo=$(awk -F: -v gid="$gid" '$3 == gid {print $1; exit}' "$export_dir/grupos_linux.txt")
     [[ -n "$grupo" ]] || { echo "[!] Falta el grupo primario de $user." >&2; return 1; }
     registro=$(getent group "$grupo") || { echo "[!] Falta $grupo en el destino." >&2; return 1; }
     IFS=: read -r _ _ gid _ <<< "$registro"
-    if id "$user" >/dev/null 2>&1; then
-      actual=$(id -u "$user") || return 1
-      [[ "$actual" == "$uid" ]] || { echo "[!] $user tiene UID $actual; no se cambiará automáticamente a $uid." >&2; return 1; }
-      sudo usermod -g "$grupo" -c "$nombre" "$user" || return 1
-      existentes=$((existentes+1))
-    else
-      sudo useradd -M -u "$uid" -g "$gid" -c "$nombre" -d /nonexistent -s /usr/sbin/nologin "$user" || return 1
-      creados=$((creados+1))
-    fi
+    sudo useradd -M -u "$uid" -g "$gid" -c "$nombre" -d /nonexistent -s /usr/sbin/nologin "$user" || return 1
+    echo "$user" >> "$BACKUP_IMPORTACION/usuarios-nuevos.txt"
+    creados=$((creados+1))
     registrar_usuario_catalogo "$user" || return 1
   done < "$export_dir/usuarios_linux.txt"
-  echo "Usuarios: $creados creados, $existentes existentes."
+  echo "Usuarios: $creados creados, $omitidos omitidos (ya existían en el destino)."
 }
 
 importar_grupos_linux() {
@@ -101,6 +102,8 @@ importar_membresias() {
       u="${u#"${u%%[![:space:]]*}"}"; u="${u%"${u##*[![:space:]]}"}"
       [[ -n "$u" ]] || continue
       case "$u" in soporte) continue ;; esac
+      # Solo se asignan membresías a cuentas creadas en esta importación.
+      grep -qxF "$u" "$BACKUP_IMPORTACION/usuarios-nuevos.txt" || { echo "[OMITIDO] membresía de $u en $grupo: cuenta existente."; continue; }
       sudo gpasswd -a "$u" "$grupo" || return 1
       registrar_usuario_catalogo "$u" || return 1
     done
@@ -135,7 +138,7 @@ validar_export_importacion() {
       echo "[!] Cuenta bloqueada/deshabilitada en origen: $usuario" >&2; return 1
     fi
     if id "$usuario" >/dev/null 2>&1 && [[ "$(id -u "$usuario")" != "$uid" ]]; then
-      echo "[!] UID distinto para $usuario; resuelve el conflicto antes de importar." >&2; return 1
+      echo "[OMITIDO] $usuario: UID distinto en el destino; no se modifica." >&2
     fi
   done < "$dir/credenciales_samba.txt"
 }
@@ -143,9 +146,16 @@ validar_export_importacion() {
 importar_samba_hashes() {
   local dir="$1" usuario uid lm hash flags resto
   local entrada="$BACKUP_IMPORTACION/credenciales-importar.txt"
-  (umask 077; awk -F: '$1!="soporte"' "$dir/credenciales_samba.txt" > "$entrada") || return 1
+  local samba_existentes="$BACKUP_IMPORTACION/samba-existentes.txt"
+  pdbedit -L 2>/dev/null | cut -d: -f1 > "$samba_existentes" || return 1
+  # Solo se incorporan credenciales de cuentas nuevas; las existentes en el destino se omiten.
+  (umask 077; awk -F: '
+    FILENAME==ARGV[1] { nuevo[$0]=1; next }
+    FILENAME==ARGV[2] { samba[$0]=1; next }
+    ($1 in nuevo) && !($1 in samba) { print }
+  ' "$BACKUP_IMPORTACION/usuarios-nuevos.txt" "$samba_existentes" "$dir/credenciales_samba.txt" > "$entrada") || return 1
   pdbedit -e "tdbsam:$BACKUP_IMPORTACION/cuentas-antes.tdb" > "$BACKUP_IMPORTACION/respaldo-samba.log" 2>&1 || return 1
-  # Se incorporan las cuentas del origen; las exclusivas del destino se conservan.
+  # Se incorporan solo las cuentas nuevas; las existentes y las exclusivas del destino se conservan.
   if [[ -s "$entrada" ]]; then
     pdbedit -i "smbpasswd:$entrada" > "$BACKUP_IMPORTACION/importacion-samba.log" 2>&1 || {
       echo '[!] Falló Samba; puede existir una importación parcial. Respaldo conservado.' >&2; return 1;
@@ -166,7 +176,7 @@ importar_run() {
   validar_export_importacion "$export_dir" || return 1
   analizar_migracion "$export_dir" || { echo '[!] Corrige los conflictos antes de importar.' >&2; return 1; }
   seleccion="usuarios,grupos,membresias,samba"
-  echo "Se incorporan identidades, grupos y credenciales del origen. Se conservan las cuentas exclusivas del destino y su SID."
+  echo "Se incorporan identidades, grupos y credenciales de cuentas nuevas del origen. Las cuentas que ya existen en el destino se omiten sin cambios. Se conservan las cuentas exclusivas del destino y su SID."
   [[ -n "$seleccion" ]] || return 1
 
   mkdir -p "${LOG_DIR:-$REPO_PATH/logs}" || return 1
