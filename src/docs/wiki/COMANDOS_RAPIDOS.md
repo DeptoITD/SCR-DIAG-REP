@@ -1,6 +1,6 @@
 # COMANDOS RÁPIDOS — Servidor y NAS
 Actualizado: 2026-10-06. Única entrada: `src/script.sh ACCION`.
-Sin argumentos muestra ayuda; cada acción termina al completarse. Los comandos `usuarios`, `equipos` y `exportaciones` abren únicamente su gestión específica.
+Menú interactivo: `sudo bash src/menu.sh`. Sin argumentos `script.sh` muestra ayuda; cada acción termina al completarse. Los comandos `usuarios`, `equipos` y `exportaciones` abren únicamente su gestión específica.
 
 ## 1. Preparar ambos equipos
 ```bash
@@ -84,4 +84,4 @@ Usa únicamente la ruta que exista en el equipo correspondiente. La exportación
 - `src/config/data/usuarios.db`: catálogo local de usuarios, sin contraseñas.
 - `src/export/`: exportaciones y resultados locales; no se versionan.
 
-No se utilizan las rutas antiguas `src/identidades`, `src/migracion`, `src/main.sh` ni `src/menu.sh`. El código histórico permanece en `src/legacy` como referencia.
+No se utilizan las rutas antiguas `src/identidades`, `src/migracion`, `src/main.sh`. El código histórico permanece en `src/legacy` como referencia.

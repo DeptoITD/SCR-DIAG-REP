@@ -30,7 +30,7 @@ Flujo fijo: **exportar en servidor → copiar carpeta completa → importar en N
 Para carga masiva: `sudo bash src/script.sh carga-masiva /ruta/usuarios.csv`.
 Formato UTF-8: `usuario|nombre|grupo|dominio|uid|password`. El UID puede quedar vacío. Las cuentas existentes reciben la contraseña del CSV tras confirmar; conservan su home y shell. El dominio es referencia de auditoría.
 
-La única entrada es `src/script.sh ACCION`. Sin argumentos muestra ayuda. `usuarios`, `equipos` y `exportaciones` abren su administración específica. No existe un menú principal duplicado ni scripts de pruebas en el flujo.
+La única entrada es `src/script.sh ACCION`. Sin argumentos muestra ayuda. Para el menú interactivo: `sudo bash src/menu.sh`. `usuarios`, `equipos` y `exportaciones` abren su administración específica. No existen scripts de pruebas en el flujo.
 
 La importación incorpora cuentas y sincroniza sus contraseñas desde el origen, conserva las cuentas exclusivas del destino y verifica los hashes. No sustituye la base completa ni importa secretos de máquina. Excluye `soporte`. Los respaldos se conservan en `logs/importacion.*`. Exportaciones antiguas sin credenciales se rechazan; deben regenerarse.
 
