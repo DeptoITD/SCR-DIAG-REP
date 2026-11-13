@@ -159,6 +159,15 @@ usuario_crear() {
   # Validar grupo
   grep -q "^${prim_grupo}|" "$equipos_db" || { error "Grupo no existe: $prim_grupo"; return 1; }
 
+  # Contraseña elegida por el operador (sin eco, confirmada dos veces), antes de crear nada
+  local pass1 pass2
+  read -r -s -p "Contraseña: " pass1; echo
+  read -r -s -p "Repite la contraseña: " pass2; echo
+  [[ -n "$pass1" && "$pass1" == "$pass2" ]] || { echo '[!] Contraseña vacía o no coincide; no se creó la cuenta.' >&2; return 1; }
+  [[ "$pass1" != *:* && "$pass1" != *'|'* ]] || { echo '[!] La contraseña no puede contener : ni |.' >&2; return 1; }
+  pass="$pass1"
+  unset pass1 pass2
+
   extra_groups="" # Altas de trabajo: solo grupo primario.
 
   # Obtener próximo UID
@@ -177,18 +186,14 @@ usuario_crear() {
   [[ "$(id -gn "$user")" == "$prim_grupo" ]] || { error "Grupo primario incorrecto tras crear la cuenta"; return 1; }
   uid=$(id -u "$user") || return 1
 
-  # Generar password
-  pass=$(generate_password)
   establecer_password_permanente "$user" "$pass" || { echo '[!] La cuenta se creó parcialmente; falló la contraseña o Samba.' >&2; return 1; }
-
-  # Registrar en Samba
 
   # Registrar en DB
   created=$(date +%Y-%m-%d)
   registrar_usuario_catalogo "$user" || return 1
 
+  unset pass
   info "Usuario creado: $user (uid=$uid)"
-  mostrar_password_generada "$user" "$pass"
 }
 
 usuario_editar() {
