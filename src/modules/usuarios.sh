@@ -139,6 +139,16 @@ usuario_perfil_samba() {
   echo "[VERIFICADO] $user: solo $grupo, sin home ni consola. Respaldo: $respaldo"
   echo 'El grupo privado antiguo se conserva si existe: eliminarlo puede afectar archivos o ACL fuera del home.'
 }
+# Pide contraseña dos veces (sin eco) y la devuelve por stdout.
+pedir_password() {
+  local p1 p2
+  read -r -s -p "Contraseña: " p1 >&2; echo >&2
+  read -r -s -p "Repite la contraseña: " p2 >&2; echo >&2
+  [[ -n "$p1" && "$p1" == "$p2" ]] || { echo '[!] Contraseña vacía o no coincide.' >&2; return 1; }
+  [[ "$p1" != *:* && "$p1" != *'|'* ]] || { echo '[!] La contraseña no puede contener : ni |.' >&2; return 1; }
+  printf '%s' "$p1"
+}
+
 usuario_crear() {
   require_root
   local db="${DATA_DIR}/usuarios.db"
@@ -159,14 +169,8 @@ usuario_crear() {
   # Validar grupo
   grep -q "^${prim_grupo}|" "$equipos_db" || { error "Grupo no existe: $prim_grupo"; return 1; }
 
-  # Contraseña elegida por el operador (sin eco, confirmada dos veces), antes de crear nada
-  local pass1 pass2
-  read -r -s -p "Contraseña: " pass1; echo
-  read -r -s -p "Repite la contraseña: " pass2; echo
-  [[ -n "$pass1" && "$pass1" == "$pass2" ]] || { echo '[!] Contraseña vacía o no coincide; no se creó la cuenta.' >&2; return 1; }
-  [[ "$pass1" != *:* && "$pass1" != *'|'* ]] || { echo '[!] La contraseña no puede contener : ni |.' >&2; return 1; }
-  pass="$pass1"
-  unset pass1 pass2
+  # Contraseña elegida por el operador, antes de crear nada
+  pass=$(pedir_password) || return 1
 
   extra_groups="" # Altas de trabajo: solo grupo primario.
 
@@ -219,10 +223,11 @@ usuario_editar() {
       info "Nombre actualizado"
       ;;
     2)  # Contraseña
-      local pass=$(generate_password)
+      local pass
+      pass=$(pedir_password) || return 1
       establecer_password_permanente "$user" "$pass" || return 1
+      unset pass
       info "Contraseña actualizada"
-      mostrar_password_generada "$user" "$pass"
       ;;
     3)  # Grupo primario
       local new_grupo
